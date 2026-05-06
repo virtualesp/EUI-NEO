@@ -14,7 +14,17 @@
 #endif
 
 #if EUI_TRAY_HAS_BACKEND
+#if defined(EUI_TRAY_APPKIT)
+#include <objc/message.h>
+#include <string.h>
+#define objc_msgSend ((id (*)(id, SEL, ...))objc_msgSend)
+#endif
+
 #include "tray.h"
+
+#if defined(EUI_TRAY_APPKIT)
+#undef objc_msgSend
+#endif
 
 static int g_initialized = 0;
 static int g_show_requested = 0;

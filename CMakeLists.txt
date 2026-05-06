@@ -1,6 +1,11 @@
 cmake_minimum_required(VERSION 3.14)
 project(ModernOpenGLApp VERSION 1.0)
 
+if(APPLE)
+    enable_language(OBJC)
+    set_source_files_properties(core/tray_bridge.c PROPERTIES LANGUAGE OBJC)
+endif()
+
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED TRUE)
 set(CMAKE_C_STANDARD 99)
@@ -66,11 +71,6 @@ set(CORE_SOURCES
     core/text.cpp
 )
 
-if(APPLE)
-    enable_language(OBJC)
-    set_source_files_properties(core/tray_bridge.c PROPERTIES LANGUAGE OBJC)
-endif()
-
 set(APP_ICON_RESOURCE)
 if(WIN32)
     set(APP_ICON_ICO "${CMAKE_CURRENT_SOURCE_DIR}/assets/icon.ico")
@@ -88,8 +88,11 @@ function(configure_opengl_app target_name)
     if(MSVC)
         target_compile_options(${target_name} PRIVATE $<$<NOT:$<CONFIG:Debug>>:/O1> /GS- /sdl-)
         target_link_options(${target_name} PRIVATE /OPT:REF /OPT:ICF /ENTRY:mainCRTStartup /SUBSYSTEM:WINDOWS)
+    elseif(APPLE)
+        target_compile_options(${target_name} PRIVATE $<$<COMPILE_LANGUAGE:CXX>:-Os -fno-exceptions -fno-rtti>)
+        target_link_options(${target_name} PRIVATE -Wl,-dead_strip)
     else()
-        target_compile_options(${target_name} PRIVATE -Os -fno-exceptions -fno-rtti)
+        target_compile_options(${target_name} PRIVATE $<$<COMPILE_LANGUAGE:CXX>:-Os -fno-exceptions -fno-rtti>)
         target_link_options(${target_name} PRIVATE -Wl,--gc-sections -s)
     endif()
 
