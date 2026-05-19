@@ -497,27 +497,22 @@ std::string sampleTimeText() {
 void composeControlsPage(core::dsl::Ui& ui, float width, float height) {
     const float cardGap = 18.0f;
     const float cardWidth = std::max(72.0f, std::min(204.0f, (width - cardGap * 2.0f) / 3.0f));
-    const float rowWidth = cardWidth * 3.0f + cardGap * 2.0f;
     const float rowHeight = 144.0f;
     const float buttonWidth = std::max(72.0f, std::min(178.0f, (width - 36.0f) / 3.0f));
     const float fieldWidth = std::max(0.0f, std::min(width, 680.0f));
     const float componentCardWidth = std::max(120.0f, std::min(340.0f, (width - 20.0f) * 0.5f));
-    const float componentRowWidth = componentCardWidth * 2.0f + 20.0f;
     const float feedbackWidth = std::max(112.0f, std::min(176.0f, (fieldWidth - 54.0f) / 4.0f));
     const float dataRowGap = 20.0f;
     const float dropdownWidth = std::max(180.0f, std::min(260.0f, fieldWidth * 0.36f));
     const float tableWidth = std::max(260.0f, fieldWidth - dropdownWidth - dataRowGap);
     const float dataRowHeight = 200.0f;
     const float pickerGap = 18.0f;
-    const float pickerWidth = std::max(154.0f, std::min(210.0f, (fieldWidth - pickerGap * 2.0f) / 3.0f));
-    const float pickerRowWidth = pickerWidth * 3.0f + pickerGap * 2.0f;
     const float chartGap = 18.0f;
     const float chartWidth = std::max(150.0f, std::min(206.0f, (fieldWidth - chartGap * 2.0f) / 3.0f));
     const float chartHeight = 236.0f;
-    const float chartRowWidth = chartWidth * 3.0f + chartGap * 2.0f;
     const float stepperGap = 18.0f;
     const float stepperWidth = std::max(132.0f, std::min(214.0f, (fieldWidth - stepperGap * 2.0f) / 3.0f));
-    const float stepperRowWidth = stepperWidth * 3.0f + stepperGap * 2.0f;
+    const float pickerWidth = std::max(154.0f, std::min(210.0f, (fieldWidth - pickerGap * 2.0f) / 3.0f));
 
     ui.text("controls.components.title")
         .size(width, 30.0f)
@@ -527,9 +522,11 @@ void composeControlsPage(core::dsl::Ui& ui, float width, float height) {
         .color(textPrimary())
         .build();
 
-    ui.row("controls.buttons")
-        .size(buttonWidth * 3.0f + 36.0f, 68.0f)
+    ui.flow("controls.buttons")
+        .width(fieldWidth)
+        .height(core::SizeValue::wrapContent())
         .gap(18.0f)
+        .lineGap(12.0f)
         .content([&] {
             components::button(ui, "control.primary")
                 .size(buttonWidth, 54.0f)
@@ -564,7 +561,8 @@ void composeControlsPage(core::dsl::Ui& ui, float width, float height) {
                 .shadow(0.0f, 0.0f, 0.0f, shadowColor(0.0f, 0.0f))
                 .transition(pageTransition())
                 .build();
-        });
+        })
+        .build();
 
     components::input(ui, "control.input")
         .theme(themeColors())
@@ -577,7 +575,7 @@ void composeControlsPage(core::dsl::Ui& ui, float width, float height) {
         .build();
 
     ui.row("controls.toggles")
-        .size(componentRowWidth, 92.0f)
+        .size(fieldWidth, 92.0f)
         .gap(20.0f)
         .content([&] {
             ui.column("controls.checks")
@@ -623,7 +621,8 @@ void composeControlsPage(core::dsl::Ui& ui, float width, float height) {
                         .build();
                 })
                 .build();
-        });
+        })
+        .build();
 
     components::progress(ui, "control.progress")
         .theme(themeColors())
@@ -643,13 +642,15 @@ void composeControlsPage(core::dsl::Ui& ui, float width, float height) {
         .build();
 
     ui.column("controls.choice")
-        .size(fieldWidth, 148.0f)
+        .width(fieldWidth)
+        .height(core::SizeValue::wrapContent())
         .gap(18.0f)
         .content([&] {
-            ui.row("controls.choice.row")
-                .size(fieldWidth, 46.0f)
+            ui.flow("controls.choice.row")
+                .width(fieldWidth)
+                .height(core::SizeValue::wrapContent())
                 .gap(18.0f)
-                .alignItems(core::Align::CENTER)
+                .lineGap(12.0f)
                 .content([&] {
                     components::segmented(ui, "control.segmented")
                         .theme(themeColors())
@@ -675,17 +676,24 @@ void composeControlsPage(core::dsl::Ui& ui, float width, float height) {
                 })
                 .build();
 
-            ui.row("controls.stepper.row")
-                .size(stepperRowWidth, 84.0f)
+            ui.flow("controls.stepper.row")
+                .width(fieldWidth)
+                .height(core::SizeValue::wrapContent())
                 .gap(stepperGap)
+                .lineGap(12.0f)
                 .content([&] {
                     ui.column("controls.stepper.dec")
-                        .size(stepperWidth, 84.0f)
+                        .minWidth(132.0f)
+                        .maxWidth(214.0f)
+                        .width(core::SizeValue::fill())
+                        .flexGrow(1.0f)
+                        .height(84.0f)
                         .gap(8.0f)
                         .justifyContent(core::Align::CENTER)
                         .content([&] {
                             ui.text("controls.stepper.dec.label")
-                                .size(stepperWidth, 18.0f)
+                                .width(core::SizeValue::fill())
+                                .height(18.0f)
                                 .text("DEC 4-digit")
                                 .fontSize(13.0f)
                                 .lineHeight(16.0f)
@@ -714,12 +722,17 @@ void composeControlsPage(core::dsl::Ui& ui, float width, float height) {
                         .build();
 
                     ui.column("controls.stepper.hex")
-                        .size(stepperWidth, 84.0f)
+                        .minWidth(132.0f)
+                        .maxWidth(214.0f)
+                        .width(core::SizeValue::fill())
+                        .flexGrow(1.0f)
+                        .height(84.0f)
                         .gap(8.0f)
                         .justifyContent(core::Align::CENTER)
                         .content([&] {
                             ui.text("controls.stepper.hex.label")
-                                .size(stepperWidth, 18.0f)
+                                .width(core::SizeValue::fill())
+                                .height(18.0f)
                                 .text("HEX 16-bit")
                                 .fontSize(13.0f)
                                 .lineHeight(16.0f)
@@ -745,12 +758,17 @@ void composeControlsPage(core::dsl::Ui& ui, float width, float height) {
                         .build();
 
                     ui.column("controls.stepper.bin")
-                        .size(stepperWidth, 84.0f)
+                        .minWidth(132.0f)
+                        .maxWidth(214.0f)
+                        .width(core::SizeValue::fill())
+                        .flexGrow(1.0f)
+                        .height(84.0f)
                         .gap(8.0f)
                         .justifyContent(core::Align::CENTER)
                         .content([&] {
                             ui.text("controls.stepper.bin.label")
-                                .size(stepperWidth, 18.0f)
+                                .width(core::SizeValue::fill())
+                                .height(18.0f)
                                 .text("BIN 8-bit")
                                 .fontSize(13.0f)
                                 .lineHeight(16.0f)
@@ -787,9 +805,11 @@ void composeControlsPage(core::dsl::Ui& ui, float width, float height) {
         .color(textPrimary())
         .build();
 
-    ui.row("controls.feedback")
-        .size(feedbackWidth * 4.0f + 54.0f, 82.0f)
+    ui.flow("controls.feedback")
+        .width(fieldWidth)
+        .height(core::SizeValue::wrapContent())
         .gap(18.0f)
+        .lineGap(12.0f)
         .content([&] {
             components::button(ui, "control.dialog")
                 .theme(themeColors(), false)
@@ -897,7 +917,8 @@ void composeControlsPage(core::dsl::Ui& ui, float width, float height) {
                     sampleFeedback = "Window opened";
                 })
                 .build();
-        });
+        })
+        .build();
 
     ui.text("controls.feedback.state")
         .size(width, 22.0f)
@@ -915,9 +936,11 @@ void composeControlsPage(core::dsl::Ui& ui, float width, float height) {
         .color(textPrimary())
         .build();
 
-    ui.row("controls.pickers.row")
-        .size(pickerRowWidth, 56.0f)
+    ui.flow("controls.pickers.row")
+        .width(fieldWidth)
+        .height(core::SizeValue::wrapContent())
         .gap(pickerGap)
+        .lineGap(12.0f)
         .content([&] {
             components::button(ui, "control.datepicker.open")
                 .theme(themeColors(), false)
@@ -978,11 +1001,14 @@ void composeControlsPage(core::dsl::Ui& ui, float width, float height) {
                     sampleFeedback = "Color picker opened";
                 })
                 .build();
-        });
+        })
+        .build();
 
-    ui.row("controls.data.row")
-        .size(dropdownWidth + tableWidth + dataRowGap, dataRowHeight)
+    ui.flow("controls.data.row")
+        .width(fieldWidth)
+        .height(core::SizeValue::wrapContent())
         .gap(dataRowGap)
+        .lineGap(14.0f)
         .content([&] {
             components::dropdown(ui, "control.dropdown")
                 .theme(themeColors())
@@ -1017,7 +1043,8 @@ void composeControlsPage(core::dsl::Ui& ui, float width, float height) {
                 })
                 .transition(pageTransition())
                 .build();
-        });
+        })
+        .build();
 
     ui.text("controls.charts.title")
         .size(width, 30.0f)
@@ -1027,9 +1054,11 @@ void composeControlsPage(core::dsl::Ui& ui, float width, float height) {
         .color(textPrimary())
         .build();
 
-    ui.row("controls.charts.row")
-        .size(chartRowWidth, chartHeight)
+    ui.flow("controls.charts.row")
+        .width(fieldWidth)
+        .height(core::SizeValue::wrapContent())
         .gap(chartGap)
+        .lineGap(14.0f)
         .content([&] {
             components::linechart(ui, "control.chart.line")
                 .theme(themeColors())
@@ -1057,7 +1086,8 @@ void composeControlsPage(core::dsl::Ui& ui, float width, float height) {
                 .labels({"Blue", "Green", "Orange", "Pink"})
                 .transition(pageTransition())
                 .build();
-        });
+        })
+        .build();
 
     ui.text("controls.primitives.title")
         .size(width, 30.0f)
@@ -1067,23 +1097,29 @@ void composeControlsPage(core::dsl::Ui& ui, float width, float height) {
         .color(textPrimary())
         .build();
 
-    ui.row("properties.a")
-        .size(rowWidth, rowHeight)
+    ui.flow("properties.a")
+        .width(fieldWidth)
+        .height(core::SizeValue::wrapContent())
         .gap(cardGap)
+        .lineGap(14.0f)
         .content([&] {
             propertyCard(ui, "prop.color", "Color", "hover + press", {0.22f, 0.48f, 0.82f, 1.0f}, "color", cardWidth);
             propertyCard(ui, "prop.border", "Border", "animated edge", surface(), "border", cardWidth);
             propertyCard(ui, "prop.shadow", "Shadow", "elevation", surfaceSoft(), "shadow", cardWidth);
-        });
+        })
+        .build();
 
-    ui.row("properties.b")
-        .size(rowWidth, rowHeight)
+    ui.flow("properties.b")
+        .width(fieldWidth)
+        .height(core::SizeValue::wrapContent())
         .gap(cardGap)
+        .lineGap(14.0f)
         .content([&] {
             propertyCard(ui, "prop.alpha", "Opacity", "transparent fill", {0.86f, 0.38f, 0.52f, 0.58f}, "color", cardWidth);
             propertyCard(ui, "prop.blur", "Blur", "glass card", {0.78f, 0.92f, 1.0f, 0.22f}, "blur", cardWidth);
             propertyCard(ui, "prop.rotate", "Rotate", "transform", {0.48f, 0.64f, 0.36f, 1.0f}, "rotate", cardWidth);
-        });
+        })
+        .build();
 
 }
 
@@ -1708,26 +1744,6 @@ void composePageBody(core::dsl::Ui& ui, float width, float height) {
     }
 }
 
-float measurePageBodyContentHeight(float width, float viewportHeight, float gap) {
-    core::dsl::Ui measureUi;
-    measureUi.begin("measure.page");
-    measureUi.column("measure.body")
-        .width(width)
-        .height(core::SizeValue::wrapContent())
-        .gap(gap)
-        .content([&] {
-            composePageBody(measureUi, width, viewportHeight);
-        })
-        .build();
-    measureUi.end();
-    measureUi.layout(width, std::max(viewportHeight, 10000.0f));
-    const core::dsl::Element* body = measureUi.find("measure.body");
-    if (body == nullptr) {
-        return viewportHeight;
-    }
-    return std::max(viewportHeight, body->frame.height);
-}
-
 void composeContent(core::dsl::Ui& ui, float width, float height) {
     const float shellWidth = std::max(0.0f, width - 72.0f);
     const float innerWidth = std::max(0.0f, shellWidth - 64.0f);
@@ -1735,21 +1751,7 @@ void composeContent(core::dsl::Ui& ui, float width, float height) {
     const float innerHeight = std::max(0.0f, shellHeight - 64.0f);
     const float headerGap = optionDense ? 18.0f : 26.0f;
     const float bodyHeight = std::max(0.0f, innerHeight - 46.0f - 30.0f - headerGap * 2.0f);
-    const float scrollWidthCandidate = 8.0f;
-    const float scrollGapCandidate = 16.0f;
-    const float fullBodyContentWidth = innerWidth;
-    const float initialContentHeight = measurePageBodyContentHeight(fullBodyContentWidth, bodyHeight, headerGap);
-    const bool scrollable = initialContentHeight > bodyHeight;
-    const float scrollWidth = scrollable ? scrollWidthCandidate : 0.0f;
-    const float scrollGap = scrollable ? scrollGapCandidate : 0.0f;
-    const float bodyContentWidth = std::max(0.0f, innerWidth - scrollWidth - scrollGap);
-    const float contentHeight = scrollable
-        ? measurePageBodyContentHeight(bodyContentWidth, bodyHeight, headerGap)
-        : initialContentHeight;
-    const float maxScroll = std::max(0.0f, contentHeight - bodyHeight);
     const int page = std::clamp(selectedPage, 0, 5);
-    pageScroll[page] = std::clamp(pageScroll[page], 0.0f, maxScroll);
-    const float scrollOffset = pageScroll[page];
 
     ui.stack("content.area")
         .size(width, height)
@@ -1772,6 +1774,7 @@ void composeContent(core::dsl::Ui& ui, float width, float height) {
             ui.column("page.content")
                 .size(innerWidth, innerHeight)
                 .margin(68.0f)
+                .padding(0.0f)
                 .gap(headerGap)
                 .content([&] {
                     ui.text("page.title")
@@ -1792,38 +1795,22 @@ void composeContent(core::dsl::Ui& ui, float width, float height) {
                         .transition(textTransition())
                         .build();
 
-                    auto body = ui.stack("page.body")
+                    ui.stack("page.body")
                         .size(innerWidth, bodyHeight)
-                        .clip();
-                    if (scrollable) {
-                        body.onScroll([page, maxScroll](const core::ScrollEvent& event) {
-                            pageScroll[page] = std::clamp(pageScroll[page] - static_cast<float>(event.y) * 48.0f, 0.0f, maxScroll);
-                        });
-                    }
-                    body.content([&] {
-                            ui.column("page.body.content")
-                                .y(-scrollOffset)
-                                .size(bodyContentWidth, contentHeight)
+                        .content([&] {
+                            components::scrollView(ui, "page.body.scrollview")
+                                .theme(themeColors())
+                                .size(innerWidth, bodyHeight)
+                                .offset(pageScroll[page])
                                 .gap(headerGap)
-                                .content([&] {
-                                    composePageBody(ui, bodyContentWidth, contentHeight);
+                                .step(48.0f)
+                                .onChange([page](float value) {
+                                    pageScroll[page] = value;
+                                })
+                                .content([&](core::dsl::Ui& contentUi, float contentWidth, float viewportHeight) {
+                                    composePageBody(contentUi, contentWidth, viewportHeight);
                                 })
                                 .build();
-
-                            if (scrollable) {
-                                components::scroll(ui, "page.body.scroll")
-                                    .theme(themeColors())
-                                    .x(std::max(0.0f, innerWidth - scrollWidth))
-                                    .size(scrollWidth, bodyHeight)
-                                    .viewport(bodyHeight)
-                                    .content(contentHeight)
-                                    .offset(scrollOffset)
-                                    .zIndex(10)
-                                    .onChange([page](float value) {
-                                        pageScroll[page] = value;
-                                    })
-                                    .build();
-                            }
                         })
                         .build();
                 });

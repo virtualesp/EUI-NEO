@@ -106,6 +106,8 @@ Rules:
 - Put mutable page state in an anonymous namespace in the same `app/*.cpp`.
 - Let callbacks mutate that state directly.
 - Use `components::theme` tokens when the page needs a coherent visual system.
+- Prefer layout-first page composition: build sections with `row`, `column`, `stack`, `gap`, `margin`, `align`, `fill`, and `wrapContent` before reaching for manual `.x(...)` / `.y(...)` math.
+- Prefer `flow`, `padding`, `min/max`, and `flex` before introducing manual width formulas for responsive groups.
 
 ## Building Or Extending A Component
 
@@ -125,6 +127,7 @@ Use existing files as reference patterns:
 - `components/checkbox.h` for controlled boolean state
 - `components/input.h` for focus/text-input handling
 - `components/scroll.h` for controlled scrolling behavior
+- `components/scrollview.h` for auto-measured scrollable containers
 
 ## Component Authoring Rules
 
@@ -145,13 +148,16 @@ Avoid these mistakes:
 ## Easy-To-Miss UI Pitfalls
 
 - In this DSL, text that should look vertically centered usually needs `verticalAlign(core::VerticalAlign::Center)` plus a `lineHeight(...)` near the actual font size. Do not blindly set `lineHeight` to the full control height, or the text can look visually top-biased even when the frame is centered.
-- For scrollable pages like `app/gallery.cpp`, prefer measuring the DSL tree and deriving content height from layout results instead of maintaining magic height sums by hand. If width changes when a scrollbar appears, do a second measurement pass with the reduced content width.
+- For scrollable pages like `app/gallery.cpp`, prefer `components::scrollView(...)` or a layout measurement pass instead of maintaining magic height sums by hand. If width changes when a scrollbar appears, do a second measurement pass with the reduced content width.
+- `flow` is the default choice for responsive button groups, chip rows, picker rows, and property-card grids. Do not manually wrap rows with ad-hoc `if (x > width)` math in app code.
+- Use `padding(...)` for container insets first. Do not create extra wrapper layers or hand-subtract inner widths unless the component API truly requires it.
+- Use `minWidth/maxWidth/flexGrow/flexShrink` to express responsive intent before writing repeated `std::min/std::max` width formulas in pages.
 
 ## DSL Rules That Matter In Practice
 
 Available primitives and containers are:
 
-- Containers: `row`, `column`, `stack`
+- Containers: `row`, `column`, `stack`, `flow`
 - Visual primitives: `rect`, `text`, `image`, `polygon`
 
 Important shared builder capabilities from `core/dsl.h`:
@@ -160,13 +166,30 @@ Important shared builder capabilities from `core/dsl.h`:
 - Interaction: `.interactive()`, `.onClick()`, `.focusable()`, `.onFocusChanged()`, `.onTextInput()`, `.onScroll()`, `.onDrag()`
 - Motion: `.transition(...)`, `.animate(...)`, transform properties
 
-Current layout limitations you must design around:
+Important current layout capabilities:
 
-- No padding property
-- No flex-grow/flex-shrink
-- No min/max size
-- No wrap flow layout
-- Transform does not change hit-test bounds
+- `padding(...)` is available on layout builders and participates in measure/layout.
+- `flow(...)` is available for auto-wrapping horizontal groups.
+- `minWidth/minHeight/maxWidth/maxHeight` are available on layout builders.
+- `Fill` plus `flexGrow/flexShrink` supports lightweight main-axis space distribution.
+- Transform still does not change hit-test bounds.
+
+Prefer layout over manual positioning whenever possible.
+
+- Default to `row` / `column` / `stack` plus `gap`, `margin`, `align`, `fill`, and `wrapContent`.
+- For responsive horizontal groups, default to `flow` before inventing breakpoint math.
+- Use explicit `.x(...)` / `.y(...)` mainly for overlay content, free-positioned decoration, drag targets, or intentionally absolute `stack` children.
+- If you find yourself hand-calculating many sibling positions or content heights in app code, first ask whether another nested layout container can express it.
+- If a scrollable page needs content height, prefer `components::scrollView` or measuring the DSL layout result instead of maintaining hard-coded height sums.
+
+### Common Layout Choices
+
+- Use `row` for a single horizontal line that should not wrap.
+- Use `flow` for horizontal groups that should wrap naturally as width changes.
+- Use `column` for vertical sections and stacked form rows.
+- Use `stack` for overlays, decorations, floating layers, and absolute-positioned children.
+- Use `padding` on the container before subtracting content width by hand.
+- Use `min/max/flex` before locking child widths to viewport-derived formulas.
 
 Use nested containers and margins instead of inventing a new layout system.
 

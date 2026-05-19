@@ -17,6 +17,7 @@
 #include "components/progress.h"
 #include "components/radio.h"
 #include "components/scroll.h"
+#include "components/scrollview.h"
 #include "components/segmented.h"
 #include "components/slider.h"
 #include "components/stepper.h"

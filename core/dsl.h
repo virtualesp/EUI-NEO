@@ -46,6 +46,7 @@ enum class ElementKind {
     Row,
     Column,
     Stack,
+    Flow,
     Rect,
     Polygon,
     Text,
@@ -77,12 +78,20 @@ struct Element {
     SizeValue width = SizeValue::wrapContent();
     SizeValue height = SizeValue::wrapContent();
     EdgeInsets margin;
+    EdgeInsets padding;
     float spacing = 0.0f;
+    float lineSpacing = 0.0f;
     Align mainAlign = Align::START;
     Align crossAlign = Align::START;
     LayoutRect frame;
     int zIndex = 0;
     bool clip = false;
+    float minLayoutWidth = 0.0f;
+    float minLayoutHeight = 0.0f;
+    float maxLayoutWidth = 0.0f;
+    float maxLayoutHeight = 0.0f;
+    float flexGrow = 0.0f;
+    float flexShrink = 1.0f;
 
     Color color = {1.0f, 1.0f, 1.0f, 1.0f};
     Gradient gradient;
@@ -144,6 +153,9 @@ struct Element {
         }
         if (kind == ElementKind::Column) {
             return LayoutType::Column;
+        }
+        if (kind == ElementKind::Flow) {
+            return LayoutType::Flow;
         }
         return LayoutType::Stack;
     }
@@ -252,6 +264,40 @@ public:
         return gap(value);
     }
 
+    Derived& lineGap(float value) {
+        element_->lineSpacing = std::max(0.0f, value);
+        return self();
+    }
+
+    Derived& lineSpacing(float value) {
+        return lineGap(value);
+    }
+
+    Derived& padding(float value) {
+        element_->padding = EdgeInsets::all(std::max(0.0f, value));
+        return self();
+    }
+
+    Derived& padding(float horizontal, float vertical) {
+        element_->padding = {
+            std::max(0.0f, horizontal),
+            std::max(0.0f, vertical),
+            std::max(0.0f, horizontal),
+            std::max(0.0f, vertical)
+        };
+        return self();
+    }
+
+    Derived& padding(float left, float top, float right, float bottom) {
+        element_->padding = {
+            std::max(0.0f, left),
+            std::max(0.0f, top),
+            std::max(0.0f, right),
+            std::max(0.0f, bottom)
+        };
+        return self();
+    }
+
     Derived& justifyContent(Align value) {
         element_->mainAlign = value;
         return self();
@@ -265,6 +311,54 @@ public:
     Derived& align(Align main, Align cross) {
         element_->mainAlign = main;
         element_->crossAlign = cross;
+        return self();
+    }
+
+    Derived& minWidth(float value) {
+        element_->minLayoutWidth = std::max(0.0f, value);
+        return self();
+    }
+
+    Derived& minHeight(float value) {
+        element_->minLayoutHeight = std::max(0.0f, value);
+        return self();
+    }
+
+    Derived& minSize(float widthValue, float heightValue) {
+        element_->minLayoutWidth = std::max(0.0f, widthValue);
+        element_->minLayoutHeight = std::max(0.0f, heightValue);
+        return self();
+    }
+
+    Derived& maxWidth(float value) {
+        element_->maxLayoutWidth = std::max(0.0f, value);
+        return self();
+    }
+
+    Derived& maxHeight(float value) {
+        element_->maxLayoutHeight = std::max(0.0f, value);
+        return self();
+    }
+
+    Derived& maxSize(float widthValue, float heightValue) {
+        element_->maxLayoutWidth = std::max(0.0f, widthValue);
+        element_->maxLayoutHeight = std::max(0.0f, heightValue);
+        return self();
+    }
+
+    Derived& flexGrow(float value = 1.0f) {
+        element_->flexGrow = std::max(0.0f, value);
+        return self();
+    }
+
+    Derived& flexShrink(float value = 1.0f) {
+        element_->flexShrink = std::max(0.0f, value);
+        return self();
+    }
+
+    Derived& flex(float grow, float shrink = 1.0f) {
+        element_->flexGrow = std::max(0.0f, grow);
+        element_->flexShrink = std::max(0.0f, shrink);
         return self();
     }
 
@@ -874,6 +968,10 @@ public:
         return LayoutBuilder(*this, addElement(ElementKind::Column, id));
     }
 
+    LayoutBuilder flow(const std::string& id = "") {
+        return LayoutBuilder(*this, addElement(ElementKind::Flow, id));
+    }
+
     LayoutBuilder stack(const std::string& id = "") {
         return LayoutBuilder(*this, addElement(ElementKind::Stack, id));
     }
@@ -1004,10 +1102,18 @@ private:
         node->setWidth(element.width);
         node->setHeight(element.height);
         node->setMargin(element.margin);
+        node->setPadding(element.padding);
         node->setPosition(element.x, element.y, element.hasX, element.hasY);
         node->setSpacing(element.spacing);
+        node->setLineSpacing(element.lineSpacing);
         node->setMainAlign(element.mainAlign);
         node->setCrossAlign(element.crossAlign);
+        node->setMinWidth(element.minLayoutWidth);
+        node->setMinHeight(element.minLayoutHeight);
+        node->setMaxWidth(element.maxLayoutWidth);
+        node->setMaxHeight(element.maxLayoutHeight);
+        node->setFlexGrow(element.flexGrow);
+        node->setFlexShrink(element.flexShrink);
 
         Node* raw = node.get();
         links.push_back({&element, raw});
