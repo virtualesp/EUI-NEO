@@ -232,8 +232,8 @@ std::string resolveRemoteImagePath(const std::string& url, bool* pending) {
 
     const bool started = async::restart(
         "image.remote." + url,
-        [url, localPath] {
-            return network::downloadUrlToFile(url, localPath);
+        [url, localPath](const async::CancelToken& token) {
+            return network::downloadUrlToFile(url, localPath, &token);
         },
         [url, localPath](const async::Result<bool>& result) {
             const bool ok = result.ok && result.value;
@@ -293,17 +293,17 @@ std::string resolveBingImagePath(const std::string& uri, bool* pending) {
 
     const bool started = async::restart(
         "image.bing." + uri,
-        [uri] {
+        [uri](const async::CancelToken& token) {
             BingDownloadResult result;
             std::string payload;
-            result.ok = network::downloadUrlToString(buildBingDailyApiUrl(uri), payload);
-            if (result.ok) {
+            result.ok = network::downloadUrlToString(buildBingDailyApiUrl(uri), payload, &token);
+            if (result.ok && !token.canceled()) {
                 result.imageUrl = extractBingImageUrlFromJson(payload);
                 result.localPath = buildDownloadedImagePath(result.imageUrl);
                 if (result.imageUrl.empty() || result.localPath.empty()) {
                     result.ok = false;
                 } else if (!std::filesystem::exists(result.localPath)) {
-                    result.ok = network::downloadUrlToFile(result.imageUrl, result.localPath);
+                    result.ok = network::downloadUrlToFile(result.imageUrl, result.localPath, &token);
                 }
             }
             return result;

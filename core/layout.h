@@ -531,7 +531,7 @@ private:
     float maxWidth_ = std::numeric_limits<float>::max();
     float maxHeight_ = std::numeric_limits<float>::max();
     float flexGrow_ = 0.0f;
-    float flexShrink_ = 1.0f;
+    float flexShrink_ = 0.0f;
     float measuredWidth_ = 0.0f;
     float measuredHeight_ = 0.0f;
     LayoutRect frame_;

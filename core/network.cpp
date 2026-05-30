@@ -44,6 +44,10 @@ std::unordered_map<std::string, TextState> gTextRequests;
 std::atomic<bool> gAnyTextReady{false};
 
 #if defined(EUI_HAS_CURL)
+struct CurlCancelContext {
+    const async::CancelToken* token = nullptr;
+};
+
 size_t curlWriteToFile(void* data, size_t size, size_t nmemb, void* userdata) {
     const size_t bytes = size * nmemb;
     auto* output = reinterpret_cast<std::ofstream*>(userdata);
@@ -56,6 +60,21 @@ size_t curlWriteToString(void* data, size_t size, size_t nmemb, void* userdata) 
     auto* output = reinterpret_cast<std::string*>(userdata);
     output->append(reinterpret_cast<const char*>(data), bytes);
     return bytes;
+}
+
+int curlProgressCallback(void* userdata, curl_off_t, curl_off_t, curl_off_t, curl_off_t) {
+    const auto* context = reinterpret_cast<const CurlCancelContext*>(userdata);
+    return context != nullptr && context->token != nullptr && context->token->canceled() ? 1 : 0;
+}
+
+void installCurlCancel(CURL* curl, CurlCancelContext& context, const async::CancelToken* cancelToken) {
+    context.token = cancelToken;
+    if (cancelToken == nullptr) {
+        return;
+    }
+    curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 0L);
+    curl_easy_setopt(curl, CURLOPT_XFERINFOFUNCTION, curlProgressCallback);
+    curl_easy_setopt(curl, CURLOPT_XFERINFODATA, &context);
 }
 
 bool ensureCurlReady() {
@@ -96,7 +115,10 @@ std::string cacheFilePath(const std::string& key, const std::string& extension, 
     return (dir / name.str()).string();
 }
 
-bool downloadUrlToFile(const std::string& url, const std::string& localPath) {
+bool downloadUrlToFile(const std::string& url, const std::string& localPath, const async::CancelToken* cancelToken) {
+    if (cancelToken != nullptr && cancelToken->canceled()) {
+        return false;
+    }
 #if defined(EUI_HAS_CURL)
     if (!ensureCurlReady()) {
         return false;
@@ -114,11 +136,17 @@ bool downloadUrlToFile(const std::string& url, const std::string& localPath) {
     curl_easy_setopt(curl, CURLOPT_TIMEOUT, 20L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, curlWriteToFile);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &output);
+    CurlCancelContext cancelContext;
+    installCurlCancel(curl, cancelContext, cancelToken);
     const CURLcode code = curl_easy_perform(curl);
     long status = 0;
     curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &status);
     curl_easy_cleanup(curl);
     output.close();
+    if (cancelToken != nullptr && cancelToken->canceled()) {
+        std::remove(localPath.c_str());
+        return false;
+    }
     return code == CURLE_OK && status >= 200 && status < 300;
 #elif defined(_WIN32)
     const HRESULT result = URLDownloadToFileA(nullptr, url.c_str(), localPath.c_str(), 0, nullptr);
@@ -130,7 +158,11 @@ bool downloadUrlToFile(const std::string& url, const std::string& localPath) {
 #endif
 }
 
-bool downloadUrlToString(const std::string& url, std::string& output) {
+bool downloadUrlToString(const std::string& url, std::string& output, const async::CancelToken* cancelToken) {
+    if (cancelToken != nullptr && cancelToken->canceled()) {
+        output.clear();
+        return false;
+    }
 #if defined(EUI_HAS_CURL)
     if (!ensureCurlReady()) {
         return false;
@@ -145,14 +177,20 @@ bool downloadUrlToString(const std::string& url, std::string& output) {
     curl_easy_setopt(curl, CURLOPT_TIMEOUT, 15L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, curlWriteToString);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &output);
+    CurlCancelContext cancelContext;
+    installCurlCancel(curl, cancelContext, cancelToken);
     const CURLcode code = curl_easy_perform(curl);
     long status = 0;
     curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &status);
     curl_easy_cleanup(curl);
+    if (cancelToken != nullptr && cancelToken->canceled()) {
+        output.clear();
+        return false;
+    }
     return code == CURLE_OK && status >= 200 && status < 300;
 #elif defined(_WIN32)
     const std::string tempFile = cacheFilePath(url + "__text", ".txt", "eui_test_network_cache");
-    if (tempFile.empty() || !downloadUrlToFile(url, tempFile)) {
+    if (tempFile.empty() || !downloadUrlToFile(url, tempFile, cancelToken)) {
         return false;
     }
     std::ifstream input(tempFile, std::ios::binary);
@@ -165,6 +203,10 @@ bool downloadUrlToString(const std::string& url, std::string& output) {
     output = buffer.str();
     input.close();
     std::remove(tempFile.c_str());
+    if (cancelToken != nullptr && cancelToken->canceled()) {
+        output.clear();
+        return false;
+    }
     return !output.empty();
 #else
     (void)url;
@@ -192,9 +234,9 @@ void requestText(const std::string& key, const std::string& url) {
 
     async::runOnce(
         "network.text." + key,
-        [url] {
+        [url](const async::CancelToken& token) {
             std::string body;
-            const bool ok = downloadUrlToString(url, body);
+            const bool ok = downloadUrlToString(url, body, &token);
             if (!ok) {
                 return async::failure<std::string>("Request failed.");
             }

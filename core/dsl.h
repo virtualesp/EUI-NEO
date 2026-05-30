@@ -97,7 +97,7 @@ struct Element {
     float maxLayoutWidth = 0.0f;
     float maxLayoutHeight = 0.0f;
     float flexGrow = 0.0f;
-    float flexShrink = 1.0f;
+    float flexShrink = 0.0f;
 
     Color color = {1.0f, 1.0f, 1.0f, 1.0f};
     Gradient gradient;
