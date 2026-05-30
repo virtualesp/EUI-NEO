@@ -27,6 +27,7 @@ public:
     void setCornerRadius(float radius);
     void setOpacity(float opacity);
     void setTransform(const Transform& transform);
+    void setTransformMatrix(const TransformMatrix& matrix);
     void setFit(ImageFit fit);
     void setCoverViewport(bool enabled, const Vec2& canvasSize, const Vec2& viewportOffset);
 
@@ -50,7 +51,7 @@ private:
 
     bool updateGifTexture(const std::string& resolvedPath);
     void releaseOwnedTexture();
-    Vec2 transformPoint(float x, float y) const;
+    Vec3 transformPoint(float x, float y) const;
     void rebuildVertices(float* vertices) const;
 
     std::string source_;
@@ -63,6 +64,8 @@ private:
     float radius_ = 0.0f;
     float opacity_ = 1.0f;
     Transform transform_;
+    TransformMatrix transformMatrix_;
+    bool hasTransformMatrix_ = false;
     ImageFit fit_ = ImageFit::Cover;
     bool hasCoverViewport_ = false;
     Vec2 coverViewportSize_;

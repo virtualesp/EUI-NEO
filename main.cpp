@@ -362,7 +362,9 @@ GLFWwindow* findModalChildWindow(const std::vector<std::unique_ptr<ManagedWindow
 }
 
 int main() {
-    glfwInit();
+    if (!glfwInit()) {
+        return -1;
+    }
     TimerResolutionGuard timerResolution;
 
     glfwWindowHint(GLFW_SAMPLES, 0);
@@ -396,13 +398,20 @@ int main() {
     }
     installWindowCallbacks(window, windowState);
 
-    if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress)) {
+    const auto cleanupMainWindow = [&] {
+        core::releaseInputQueue(window);
+        glfwDestroyWindow(window);
         glfwTerminate();
+    };
+
+    if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress)) {
+        cleanupMainWindow();
         return -1;
     }
 
     if (!app::initialize(window)) {
-        glfwTerminate();
+        app::shutdown();
+        cleanupMainWindow();
         return -1;
     }
     if (app::trayEnabled()) {

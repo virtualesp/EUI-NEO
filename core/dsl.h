@@ -442,6 +442,12 @@ public:
         return self();
     }
 
+    Derived& translate3d(float xValue, float yValue, float zValue) {
+        element_->transform.translate = {xValue, yValue};
+        element_->transform.translateZ = zValue;
+        return self();
+    }
+
     Derived& translateX(float value) {
         element_->transform.translate.x = value;
         return self();
@@ -449,6 +455,11 @@ public:
 
     Derived& translateY(float value) {
         element_->transform.translate.y = value;
+        return self();
+    }
+
+    Derived& translateZ(float value) {
+        element_->transform.translateZ = value;
         return self();
     }
 
@@ -467,8 +478,28 @@ public:
         return self();
     }
 
+    Derived& rotateX(float radians) {
+        element_->transform.rotateX = radians;
+        return self();
+    }
+
+    Derived& rotateY(float radians) {
+        element_->transform.rotateY = radians;
+        return self();
+    }
+
+    Derived& rotateZ(float radians) {
+        element_->transform.rotate = radians;
+        return self();
+    }
+
     Derived& rotation(float radians) {
         return rotate(radians);
+    }
+
+    Derived& perspective(float value) {
+        element_->transform.perspective = std::max(0.0f, value);
+        return self();
     }
 
     Derived& transformOrigin(float xValue, float yValue) {
@@ -678,6 +709,12 @@ public:
         return this->self();
     }
 
+    Derived& translate3d(float xValue, float yValue, float zValue) {
+        this->element_->transform.translate = {xValue, yValue};
+        this->element_->transform.translateZ = zValue;
+        return this->self();
+    }
+
     Derived& translateX(float value) {
         this->element_->transform.translate.x = value;
         return this->self();
@@ -685,6 +722,11 @@ public:
 
     Derived& translateY(float value) {
         this->element_->transform.translate.y = value;
+        return this->self();
+    }
+
+    Derived& translateZ(float value) {
+        this->element_->transform.translateZ = value;
         return this->self();
     }
 
@@ -703,8 +745,28 @@ public:
         return this->self();
     }
 
+    Derived& rotateX(float radians) {
+        this->element_->transform.rotateX = radians;
+        return this->self();
+    }
+
+    Derived& rotateY(float radians) {
+        this->element_->transform.rotateY = radians;
+        return this->self();
+    }
+
+    Derived& rotateZ(float radians) {
+        this->element_->transform.rotate = radians;
+        return this->self();
+    }
+
     Derived& rotation(float radians) {
         return rotate(radians);
+    }
+
+    Derived& perspective(float value) {
+        this->element_->transform.perspective = std::max(0.0f, value);
+        return this->self();
     }
 
     Derived& transformOrigin(float xValue, float yValue) {
@@ -948,6 +1010,12 @@ public:
         return *this;
     }
 
+    ImageBuilder& translate3d(float xValue, float yValue, float zValue) {
+        element_->transform.translate = {xValue, yValue};
+        element_->transform.translateZ = zValue;
+        return *this;
+    }
+
     ImageBuilder& translateX(float value) {
         element_->transform.translate.x = value;
         return *this;
@@ -955,6 +1023,11 @@ public:
 
     ImageBuilder& translateY(float value) {
         element_->transform.translate.y = value;
+        return *this;
+    }
+
+    ImageBuilder& translateZ(float value) {
+        element_->transform.translateZ = value;
         return *this;
     }
 
@@ -973,8 +1046,28 @@ public:
         return *this;
     }
 
+    ImageBuilder& rotateX(float radians) {
+        element_->transform.rotateX = radians;
+        return *this;
+    }
+
+    ImageBuilder& rotateY(float radians) {
+        element_->transform.rotateY = radians;
+        return *this;
+    }
+
+    ImageBuilder& rotateZ(float radians) {
+        element_->transform.rotate = radians;
+        return *this;
+    }
+
     ImageBuilder& rotation(float radians) {
         return rotate(radians);
+    }
+
+    ImageBuilder& perspective(float value) {
+        element_->transform.perspective = std::max(0.0f, value);
+        return *this;
     }
 
     ImageBuilder& transformOrigin(float xValue, float yValue) {

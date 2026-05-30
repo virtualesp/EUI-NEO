@@ -18,6 +18,12 @@ struct Vec2 {
     float y = 0.0f;
 };
 
+struct Vec3 {
+    float x = 0.0f;
+    float y = 0.0f;
+    float z = 0.0f;
+};
+
 struct Color {
     float r = 1.0f;
     float g = 1.0f;
@@ -64,10 +70,48 @@ struct Shadow {
 
 struct Transform {
     Vec2 translate = {0.0f, 0.0f};
+    float translateZ = 0.0f;
     Vec2 scale = {1.0f, 1.0f};
     float rotate = 0.0f;
+    float rotateX = 0.0f;
+    float rotateY = 0.0f;
     Vec2 origin = {0.5f, 0.5f};
+    float perspective = 0.0f;
 };
+
+struct TransformMatrix {
+    float m00 = 1.0f;
+    float m01 = 0.0f;
+    float tx = 0.0f;
+    float m10 = 0.0f;
+    float m11 = 1.0f;
+    float ty = 0.0f;
+    float px = 0.0f;
+    float py = 0.0f;
+    float pw = 1.0f;
+};
+
+inline Vec2 transformPoint(const TransformMatrix& matrix, float x, float y) {
+    const float w = matrix.px * x + matrix.py * y + matrix.pw;
+    const float invW = std::fabs(w) > 0.0001f ? 1.0f / w : 1.0f;
+    return {
+        (matrix.m00 * x + matrix.m01 * y + matrix.tx) * invW,
+        (matrix.m10 * x + matrix.m11 * y + matrix.ty) * invW
+    };
+}
+
+inline Vec3 transformPointWithW(const TransformMatrix& matrix, float x, float y) {
+    float w = matrix.px * x + matrix.py * y + matrix.pw;
+    if (std::fabs(w) <= 0.0001f) {
+        w = w < 0.0f ? -0.0001f : 0.0001f;
+    }
+    const float invW = 1.0f / w;
+    return {
+        (matrix.m00 * x + matrix.m01 * y + matrix.tx) * invW,
+        (matrix.m10 * x + matrix.m11 * y + matrix.ty) * invW,
+        w
+    };
+}
 
 class RoundedRectPrimitive {
 public:
@@ -79,7 +123,7 @@ public:
     bool initialize() {
         const char* vertexSource =
             "#version 330 core\n"
-            "layout(location = 0) in vec2 aScreenPos;\n"
+            "layout(location = 0) in vec3 aScreenPos;\n"
             "layout(location = 1) in vec2 aLocalPos;\n"
             "uniform vec2 uWindowSize;\n"
             "out vec2 vLocalPos;\n"
@@ -87,7 +131,7 @@ public:
             "    vLocalPos = aLocalPos;\n"
             "    vec2 ndc = vec2((aScreenPos.x / uWindowSize.x) * 2.0 - 1.0,\n"
             "                    1.0 - (aScreenPos.y / uWindowSize.y) * 2.0);\n"
-            "    gl_Position = vec4(ndc, 0.0, 1.0);\n"
+            "    gl_Position = vec4(ndc * aScreenPos.z, 0.0, aScreenPos.z);\n"
             "}\n";
 
         const char* fragmentSource =
@@ -229,11 +273,30 @@ public:
     void setBorder(const Border& border) { border_ = border; }
     void setShadow(const Shadow& shadow) { shadow_ = shadow; }
     void setBlur(float blur) { blur_ = std::max(0.0f, blur); }
-    void setTranslate(float x, float y) { transform_.translate = {x, y}; }
-    void setScale(float x, float y) { transform_.scale = {x, y}; }
-    void setRotate(float radians) { transform_.rotate = radians; }
-    void setTransformOrigin(float x, float y) { transform_.origin = {x, y}; }
-    void setTransform(const Transform& transform) { transform_ = transform; }
+    void setTranslate(float x, float y) {
+        transform_.translate = {x, y};
+        hasTransformMatrix_ = false;
+    }
+    void setScale(float x, float y) {
+        transform_.scale = {x, y};
+        hasTransformMatrix_ = false;
+    }
+    void setRotate(float radians) {
+        transform_.rotate = radians;
+        hasTransformMatrix_ = false;
+    }
+    void setTransformOrigin(float x, float y) {
+        transform_.origin = {x, y};
+        hasTransformMatrix_ = false;
+    }
+    void setTransform(const Transform& transform) {
+        transform_ = transform;
+        hasTransformMatrix_ = false;
+    }
+    void setTransformMatrix(const TransformMatrix& matrix) {
+        transformMatrix_ = matrix;
+        hasTransformMatrix_ = true;
+    }
 
     const Rect& bounds() const { return bounds_; }
     const Color& color() const { return color_; }
@@ -365,10 +428,10 @@ private:
         glGenBuffers(1, &resources.vbo);
         glBindVertexArray(resources.vao);
         glBindBuffer(GL_ARRAY_BUFFER, resources.vbo);
-        glBufferData(GL_ARRAY_BUFFER, sizeof(float) * 24, nullptr, GL_DYNAMIC_DRAW);
-        glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(float) * 4, nullptr);
+        glBufferData(GL_ARRAY_BUFFER, sizeof(float) * 30, nullptr, GL_DYNAMIC_DRAW);
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(float) * 5, nullptr);
         glEnableVertexAttribArray(0);
-        glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(float) * 4, reinterpret_cast<void*>(sizeof(float) * 2));
+        glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(float) * 5, reinterpret_cast<void*>(sizeof(float) * 3));
         glEnableVertexAttribArray(1);
         glBindBuffer(GL_ARRAY_BUFFER, 0);
         glBindVertexArray(0);
@@ -522,7 +585,11 @@ private:
         return shader;
     }
 
-    Vec2 transformPoint(float x, float y) const {
+    Vec3 transformPoint(float x, float y) const {
+        if (hasTransformMatrix_) {
+            return core::transformPointWithW(transformMatrix_, x, y);
+        }
+
         const Vec2 origin = {
             bounds_.x + bounds_.width * transform_.origin.x,
             bounds_.y + bounds_.height * transform_.origin.y
@@ -535,7 +602,8 @@ private:
 
         return {
             origin.x + scaledX * cosine - scaledY * sine + transform_.translate.x,
-            origin.y + scaledX * sine + scaledY * cosine + transform_.translate.y
+            origin.y + scaledX * sine + scaledY * cosine + transform_.translate.y,
+            1.0f
         };
     }
 
@@ -585,18 +653,18 @@ private:
         const float right = geometryBounds.x + geometryBounds.width;
         const float bottom = geometryBounds.y + geometryBounds.height;
 
-        const Vec2 p0 = transformPoint(left, top);
-        const Vec2 p1 = transformPoint(right, top);
-        const Vec2 p2 = transformPoint(right, bottom);
-        const Vec2 p3 = transformPoint(left, bottom);
+        const Vec3 p0 = transformPoint(left, top);
+        const Vec3 p1 = transformPoint(right, top);
+        const Vec3 p2 = transformPoint(right, bottom);
+        const Vec3 p3 = transformPoint(left, bottom);
 
         const float vertices[] = {
-            p0.x, p0.y, left, top,
-            p1.x, p1.y, right, top,
-            p2.x, p2.y, right, bottom,
-            p0.x, p0.y, left, top,
-            p2.x, p2.y, right, bottom,
-            p3.x, p3.y, left, bottom
+            p0.x, p0.y, p0.z, left, top,
+            p1.x, p1.y, p1.z, right, top,
+            p2.x, p2.y, p2.z, right, bottom,
+            p0.x, p0.y, p0.z, left, top,
+            p2.x, p2.y, p2.z, right, bottom,
+            p3.x, p3.y, p3.z, left, bottom
         };
 
         const float radius = std::clamp(cornerRadius_, 0.0f, std::min(sdfBounds.width, sdfBounds.height) * 0.5f);
@@ -645,6 +713,8 @@ private:
     Border border_;
     Shadow shadow_;
     Transform transform_;
+    TransformMatrix transformMatrix_;
+    bool hasTransformMatrix_ = false;
     float cornerRadius_ = 0.0f;
     float blur_ = 0.0f;
     float opacity_ = 1.0f;
@@ -724,7 +794,14 @@ public:
     void setPoints(const std::vector<Vec2>& points) { points_ = points; }
     void setColor(const Color& color) { color_ = color; }
     void setOpacity(float opacity) { opacity_ = std::clamp(opacity, 0.0f, 1.0f); }
-    void setTransform(const Transform& transform) { transform_ = transform; }
+    void setTransform(const Transform& transform) {
+        transform_ = transform;
+        hasTransformMatrix_ = false;
+    }
+    void setTransformMatrix(const TransformMatrix& matrix) {
+        transformMatrix_ = matrix;
+        hasTransformMatrix_ = true;
+    }
 
     void render(int windowWidth, int windowHeight) const {
         if (!shaderProgram_ || !vao_ || !vbo_ || points_.size() < 3 || opacity_ <= 0.0f || color_.a <= 0.0f) {
@@ -868,6 +945,10 @@ private:
     }
 
     Vec2 transformPoint(float x, float y) const {
+        if (hasTransformMatrix_) {
+            return core::transformPoint(transformMatrix_, x, y);
+        }
+
         const Vec2 origin = {
             bounds_.x + bounds_.width * transform_.origin.x,
             bounds_.y + bounds_.height * transform_.origin.y
@@ -888,6 +969,8 @@ private:
     std::vector<Vec2> points_;
     Color color_ = {1.0f, 1.0f, 1.0f, 1.0f};
     Transform transform_;
+    TransformMatrix transformMatrix_;
+    bool hasTransformMatrix_ = false;
     float opacity_ = 1.0f;
     GLuint vao_ = 0;
     GLuint vbo_ = 0;

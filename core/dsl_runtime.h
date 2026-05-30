@@ -25,9 +25,7 @@ namespace core::dsl {
 class Runtime {
     struct RenderTransform {
         bool active = false;
-        Vec2 origin = {0.0f, 0.0f};
-        float scale = 1.0f;
-        Vec2 translate = {0.0f, 0.0f};
+        TransformMatrix matrix;
         float opacity = 1.0f;
     };
 
@@ -107,6 +105,7 @@ public:
         animating_ = false;
         needsCompose_ = false;
         wantsHandCursor_ = false;
+        markInstancesUnseen();
         markTimersUnseen();
         if (ImagePrimitive::consumeRemoteImageReady()) {
             fullRedraw_ = true;
@@ -133,6 +132,7 @@ public:
         applyCursor(window);
 
         promoteBackdropBlurDirtyRegions();
+        releaseUnseenInstances();
 
         const bool result = needsRender_;
         needsRender_ = false;
@@ -255,6 +255,7 @@ private:
         std::unique_ptr<RoundedRectPrimitive> primitive = std::make_unique<RoundedRectPrimitive>();
         InteractionState interaction;
         bool initialized = false;
+        bool seen = false;
         SmoothedValue<float> hoverBlend;
         SmoothedValue<float> pressBlend;
         AnimatedValue<LayoutRect> frame;
@@ -272,6 +273,7 @@ private:
         std::unique_ptr<PolygonPrimitive> primitive = std::make_unique<PolygonPrimitive>();
         InteractionState interaction;
         bool initialized = false;
+        bool seen = false;
         SmoothedValue<float> hoverBlend;
         SmoothedValue<float> pressBlend;
         AnimatedValue<LayoutRect> frame;
@@ -284,6 +286,7 @@ private:
     struct TextInstance {
         std::unique_ptr<TextPrimitive> primitive = std::make_unique<TextPrimitive>();
         bool initialized = false;
+        bool seen = false;
         AnimatedValue<LayoutRect> frame;
         AnimatedValue<Color> color;
         AnimatedValue<float> opacity;
@@ -298,12 +301,12 @@ private:
         VerticalAlign verticalAlign = VerticalAlign::Top;
         float lineHeight = 0.0f;
         std::string contentDirtyKey;
-        bool primitiveStyleDirty = true;
     };
 
     struct ImageInstance {
         std::unique_ptr<ImagePrimitive> primitive = std::make_unique<ImagePrimitive>();
         bool initialized = false;
+        bool seen = false;
         AnimatedValue<LayoutRect> frame;
         AnimatedValue<Color> tint;
         AnimatedValue<float> radius;
@@ -319,17 +322,20 @@ private:
 
     struct InteractionInstance {
         InteractionState state;
+        bool seen = false;
     };
 
     struct DirtyKeyInstance {
         std::string key;
         Rect rect;
         bool initialized = false;
+        bool seen = false;
     };
 
     struct LayoutInstance {
         AnimatedValue<Transform> transform;
         AnimatedValue<float> opacity;
+        bool seen = false;
     };
 
     struct TimerInstance {
@@ -337,6 +343,12 @@ private:
         float elapsed = 0.0f;
         bool seen = false;
         bool active = false;
+    };
+
+    struct FrameTargetInstance {
+        LayoutRect frame;
+        bool initialized = false;
+        bool seen = false;
     };
 
     struct DependentVisualState {
@@ -460,23 +472,118 @@ private:
 
     static bool isIdentityTransform(const Transform& transform) {
         return closeEnough(transform.translate, Vec2{}) &&
+               closeEnough(transform.translateZ, 0.0f) &&
                closeEnough(transform.scale, Vec2{1.0f, 1.0f}) &&
-               closeEnough(transform.rotate, 0.0f);
+               closeEnough(transform.rotate, 0.0f) &&
+               closeEnough(transform.rotateX, 0.0f) &&
+               closeEnough(transform.rotateY, 0.0f) &&
+               closeEnough(transform.perspective, 0.0f);
     }
 
-    static Vec2 transformPoint(Vec2 point, const LayoutRect& frame, const Transform& transform) {
+    static bool isIdentityMatrix(const TransformMatrix& matrix) {
+        return closeEnough(matrix.m00, 1.0f) &&
+               closeEnough(matrix.m01, 0.0f) &&
+               closeEnough(matrix.tx, 0.0f) &&
+               closeEnough(matrix.m10, 0.0f) &&
+               closeEnough(matrix.m11, 1.0f) &&
+               closeEnough(matrix.ty, 0.0f) &&
+               closeEnough(matrix.px, 0.0f) &&
+               closeEnough(matrix.py, 0.0f) &&
+               closeEnough(matrix.pw, 1.0f);
+    }
+
+    static TransformMatrix multiplyMatrix(const TransformMatrix& outer, const TransformMatrix& inner) {
+        return {
+            outer.m00 * inner.m00 + outer.m01 * inner.m10 + outer.tx * inner.px,
+            outer.m00 * inner.m01 + outer.m01 * inner.m11 + outer.tx * inner.py,
+            outer.m00 * inner.tx + outer.m01 * inner.ty + outer.tx * inner.pw,
+            outer.m10 * inner.m00 + outer.m11 * inner.m10 + outer.ty * inner.px,
+            outer.m10 * inner.m01 + outer.m11 * inner.m11 + outer.ty * inner.py,
+            outer.m10 * inner.tx + outer.m11 * inner.ty + outer.ty * inner.pw,
+            outer.px * inner.m00 + outer.py * inner.m10 + outer.pw * inner.px,
+            outer.px * inner.m01 + outer.py * inner.m11 + outer.pw * inner.py,
+            outer.px * inner.tx + outer.py * inner.ty + outer.pw * inner.pw
+        };
+    }
+
+    static TransformMatrix matrixForTransform(const Rect& frame, const Transform& transform) {
         const Vec2 origin = {
             frame.x + frame.width * transform.origin.x,
             frame.y + frame.height * transform.origin.y
         };
-        const float scaledX = (point.x - origin.x) * transform.scale.x;
-        const float scaledY = (point.y - origin.y) * transform.scale.y;
-        const float cosine = std::cos(transform.rotate);
-        const float sine = std::sin(transform.rotate);
+        const float cosX = std::cos(transform.rotateX);
+        const float sinX = std::sin(transform.rotateX);
+        const float cosY = std::cos(transform.rotateY);
+        const float sinY = std::sin(transform.rotateY);
+        const float cosZ = std::cos(transform.rotate);
+        const float sinZ = std::sin(transform.rotate);
+        const float scaleX = transform.scale.x;
+        const float scaleY = transform.scale.y;
+
+        const float xFromX = scaleX * cosY;
+        const float xFromY = scaleY * sinX * sinY;
+        const float yFromY = scaleY * cosX;
+        const float zFromX = -scaleX * sinY;
+        const float zFromY = scaleY * sinX * cosY;
+
+        const float ax = xFromX * cosZ;
+        const float bx = xFromY * cosZ - yFromY * sinZ;
+        const float ay = xFromX * sinZ;
+        const float by = xFromY * sinZ + yFromY * cosZ;
+        const float az = zFromX;
+        const float bz = zFromY;
+
+        if (transform.perspective <= 0.0001f) {
+            return {
+                ax,
+                bx,
+                origin.x + transform.translate.x - ax * origin.x - bx * origin.y,
+                ay,
+                by,
+                origin.y + transform.translate.y - ay * origin.x - by * origin.y,
+                0.0f,
+                0.0f,
+                1.0f
+            };
+        }
+
+        const float perspective = std::max(1.0f, transform.perspective);
+        const float tx = transform.translate.x;
+        const float ty = transform.translate.y;
+        const float tz = transform.translateZ;
+        const float nxDx = perspective * ax - origin.x * az;
+        const float nxDy = perspective * bx - origin.x * bz;
+        const float nyDx = perspective * ay - origin.y * az;
+        const float nyDy = perspective * by - origin.y * bz;
+
         return {
-            origin.x + scaledX * cosine - scaledY * sine + transform.translate.x,
-            origin.y + scaledX * sine + scaledY * cosine + transform.translate.y
+            nxDx,
+            nxDy,
+            perspective * (origin.x + tx) - origin.x * tz - nxDx * origin.x - nxDy * origin.y,
+            nyDx,
+            nyDy,
+            perspective * (origin.y + ty) - origin.y * tz - nyDx * origin.x - nyDy * origin.y,
+            -az,
+            -bz,
+            perspective - tz + az * origin.x + bz * origin.y
         };
+    }
+
+    static TransformMatrix matrixForScaleAround(const Rect& frame, float scale) {
+        Transform transform;
+        transform.scale = {scale, scale};
+        transform.origin = {0.5f, 0.5f};
+        return matrixForTransform(frame, transform);
+    }
+
+    static RenderTransform appendRenderMatrix(RenderTransform transform, const TransformMatrix& matrix) {
+        transform.matrix = multiplyMatrix(transform.matrix, matrix);
+        transform.active = transform.active || !isIdentityMatrix(matrix);
+        return transform;
+    }
+
+    static Vec2 transformPoint(Vec2 point, const LayoutRect& frame, const Transform& transform) {
+        return core::transformPoint(matrixForTransform({frame.x, frame.y, frame.width, frame.height}, transform), point.x, point.y);
     }
 
     static float shadowVisualPadding(const Shadow& shadow) {
@@ -633,10 +740,7 @@ private:
         if (!transform.active) {
             return point;
         }
-        return {
-            transform.origin.x + (point.x - transform.origin.x) * transform.scale + transform.translate.x,
-            transform.origin.y + (point.y - transform.origin.y) * transform.scale + transform.translate.y
-        };
+        return core::transformPoint(transform.matrix, point.x, point.y);
     }
 
     static Rect applyRenderTransform(const Rect& rect, const RenderTransform& transform) {
@@ -644,13 +748,15 @@ private:
             return rect;
         }
 
-        const Vec2 topLeft = applyRenderTransform(Vec2{rect.x, rect.y}, transform);
-        return {
-            topLeft.x,
-            topLeft.y,
-            rect.width * transform.scale,
-            rect.height * transform.scale
-        };
+        const Vec2 p0 = applyRenderTransform(Vec2{rect.x, rect.y}, transform);
+        const Vec2 p1 = applyRenderTransform(Vec2{rect.x + rect.width, rect.y}, transform);
+        const Vec2 p2 = applyRenderTransform(Vec2{rect.x + rect.width, rect.y + rect.height}, transform);
+        const Vec2 p3 = applyRenderTransform(Vec2{rect.x, rect.y + rect.height}, transform);
+        const float left = std::min(std::min(p0.x, p1.x), std::min(p2.x, p3.x));
+        const float top = std::min(std::min(p0.y, p1.y), std::min(p2.y, p3.y));
+        const float right = std::max(std::max(p0.x, p1.x), std::max(p2.x, p3.x));
+        const float bottom = std::max(std::max(p0.y, p1.y), std::max(p2.y, p3.y));
+        return {left, top, right - left, bottom - top};
     }
 
     static Border scaleBorder(Border border, float dpiScale) {
@@ -669,7 +775,15 @@ private:
     static Transform scaleTransform(Transform transform, float dpiScale) {
         transform.translate.x = toPixels(transform.translate.x, dpiScale);
         transform.translate.y = toPixels(transform.translate.y, dpiScale);
+        transform.translateZ = toPixels(transform.translateZ, dpiScale);
+        transform.perspective = toPixels(transform.perspective, dpiScale);
         return transform;
+    }
+
+    static TransformMatrix combinedPrimitiveMatrix(const RenderTransform& renderTransform,
+                                                   const Rect& frame,
+                                                   const Transform& localTransform) {
+        return multiplyMatrix(renderTransform.matrix, matrixForTransform(frame, localTransform));
     }
 
     static bool isRectAnimating(const Element& element, const RectInstance& instance) {
@@ -745,14 +859,16 @@ private:
     }
 
     bool updateFrameTarget(const Element& element) {
-        auto item = frameTargets_.find(element.id);
-        if (item == frameTargets_.end()) {
-            frameTargets_.emplace(element.id, element.frame);
+        FrameTargetInstance& instance = frameTargets_.try_emplace(element.id).first->second;
+        instance.seen = true;
+        if (!instance.initialized) {
+            instance.frame = element.frame;
+            instance.initialized = true;
             return false;
         }
 
-        const bool changed = !closeEnough(item->second, element.frame);
-        item->second = element.frame;
+        const bool changed = !closeEnough(instance.frame, element.frame);
+        instance.frame = element.frame;
         return changed;
     }
 
@@ -821,35 +937,98 @@ private:
     }
 
     RectInstance& rectInstance(const std::string& id) {
-        return rects_.try_emplace(id).first->second;
+        RectInstance& instance = rects_.try_emplace(id).first->second;
+        instance.seen = true;
+        return instance;
     }
 
     PolygonInstance& polygonInstance(const std::string& id) {
-        return polygons_.try_emplace(id).first->second;
+        PolygonInstance& instance = polygons_.try_emplace(id).first->second;
+        instance.seen = true;
+        return instance;
     }
 
     TextInstance& textInstance(const std::string& id) {
-        return texts_.try_emplace(id).first->second;
+        TextInstance& instance = texts_.try_emplace(id).first->second;
+        instance.seen = true;
+        return instance;
     }
 
     ImageInstance& imageInstance(const std::string& id) {
-        return images_.try_emplace(id).first->second;
+        ImageInstance& instance = images_.try_emplace(id).first->second;
+        instance.seen = true;
+        return instance;
     }
 
     InteractionInstance& interactionInstance(const std::string& id) {
-        return interactions_.try_emplace(id).first->second;
+        InteractionInstance& instance = interactions_.try_emplace(id).first->second;
+        instance.seen = true;
+        return instance;
     }
 
     DirtyKeyInstance& dirtyKeyInstance(const std::string& id) {
-        return dirtyKeys_.try_emplace(id).first->second;
+        DirtyKeyInstance& instance = dirtyKeys_.try_emplace(id).first->second;
+        instance.seen = true;
+        return instance;
     }
 
     LayoutInstance& layoutInstance(const std::string& id) {
-        return layouts_.try_emplace(id).first->second;
+        LayoutInstance& instance = layouts_.try_emplace(id).first->second;
+        instance.seen = true;
+        return instance;
     }
 
     TimerInstance& timerInstance(const std::string& id) {
         return timers_.try_emplace(id).first->second;
+    }
+
+    template <typename Map>
+    void markEntriesUnseen(Map& entries) {
+        for (auto& item : entries) {
+            item.second.seen = false;
+        }
+    }
+
+    template <typename Map, typename OnRemove>
+    void releaseUnseenEntries(Map& entries, OnRemove&& onRemove) {
+        for (auto item = entries.begin(); item != entries.end(); ) {
+            if (!item->second.seen) {
+                onRemove(item->second);
+                item = entries.erase(item);
+            } else {
+                ++item;
+            }
+        }
+    }
+
+    void markInstancesUnseen() {
+        markEntriesUnseen(rects_);
+        markEntriesUnseen(polygons_);
+        markEntriesUnseen(texts_);
+        markEntriesUnseen(images_);
+        markEntriesUnseen(interactions_);
+        markEntriesUnseen(dirtyKeys_);
+        markEntriesUnseen(layouts_);
+        markEntriesUnseen(frameTargets_);
+    }
+
+    void releaseUnseenInstances() {
+        auto releasePrimitive = [](auto& instance) {
+            if (instance.initialized) {
+                instance.primitive->destroy();
+                instance.initialized = false;
+            }
+        };
+        auto noop = [](auto&) {};
+
+        releaseUnseenEntries(rects_, releasePrimitive);
+        releaseUnseenEntries(polygons_, releasePrimitive);
+        releaseUnseenEntries(texts_, releasePrimitive);
+        releaseUnseenEntries(images_, releasePrimitive);
+        releaseUnseenEntries(interactions_, noop);
+        releaseUnseenEntries(dirtyKeys_, noop);
+        releaseUnseenEntries(layouts_, noop);
+        releaseUnseenEntries(frameTargets_, noop);
     }
 
     void markTimersUnseen() {
@@ -1333,7 +1512,6 @@ private:
             instance.horizontalAlign = element.horizontalAlign;
             instance.verticalAlign = element.verticalAlign;
             instance.lineHeight = element.lineHeight;
-            instance.primitiveStyleDirty = true;
         }
 
         bool changed = false;
@@ -1526,15 +1704,8 @@ private:
                 const bool hasTransform = !isIdentityTransform(local);
                 const bool hasOpacity = !closeEnough(opacity, 1.0f);
                 if (hasTransform || hasOpacity) {
-                    const Rect frame = applyRenderTransform(toPixelRect(element.frame, dpiScale), result);
-                    result.active = true;
-                    result.origin = {
-                        frame.x + frame.width * local.origin.x,
-                        frame.y + frame.height * local.origin.y
-                    };
-                    result.scale *= (local.scale.x + local.scale.y) * 0.5f;
-                    result.translate.x += toPixels(local.translate.x, dpiScale);
-                    result.translate.y += toPixels(local.translate.y, dpiScale);
+                    Transform scaled = scaleTransform(local, dpiScale);
+                    result = appendRenderMatrix(result, matrixForTransform(toPixelRect(element.frame, dpiScale), scaled));
                     result.opacity *= opacity;
                 }
             }
@@ -1556,10 +1727,7 @@ private:
             if (pressBlendForSource(element.visualStateSourceId, press, sourceFrame)) {
                 const float scale = 1.0f - (1.0f - element.pressedScale) * press;
                 if (std::fabs(scale - 1.0f) > 0.0001f) {
-                    const Rect frame = applyRenderTransform(toPixelRect(sourceFrame, dpiScale), result);
-                    result.active = true;
-                    result.origin = {frame.x + frame.width * 0.5f, frame.y + frame.height * 0.5f};
-                    result.scale *= scale;
+                    result = appendRenderMatrix(result, matrixForScaleAround(toPixelRect(sourceFrame, dpiScale), scale));
                 }
             }
         }
@@ -1773,19 +1941,8 @@ private:
         }
 
         const Rect frame = toPixelRect(instance.frame.value(), dpiScale);
-        const float visualScale = renderTransform.active ? renderTransform.scale : 1.0f;
         const Color currentColor = instance.color.value();
         Transform transform = scaleTransform(instance.transform.value(), dpiScale);
-        if (renderTransform.active && frame.width > 0.0f && frame.height > 0.0f) {
-            transform.origin = {
-                (renderTransform.origin.x - frame.x) / frame.width,
-                (renderTransform.origin.y - frame.y) / frame.height
-            };
-            transform.scale.x *= visualScale;
-            transform.scale.y *= visualScale;
-            transform.translate.x += renderTransform.translate.x;
-            transform.translate.y += renderTransform.translate.y;
-        }
 
         instance.primitive->setBounds(frame.x, frame.y, frame.width, frame.height);
         instance.primitive->setColor(currentColor);
@@ -1795,7 +1952,7 @@ private:
         instance.primitive->setCornerRadius(toPixels(instance.radius.value(), dpiScale));
         instance.primitive->setBlur(toPixels(instance.blur.value(), dpiScale));
         instance.primitive->setOpacity(instance.opacity.value() * renderTransform.opacity);
-        instance.primitive->setTransform(transform);
+        instance.primitive->setTransformMatrix(combinedPrimitiveMatrix(renderTransform, frame, transform));
         instance.primitive->render(windowWidth, windowHeight);
     }
 
@@ -1822,24 +1979,13 @@ private:
         }
 
         const Rect frame = toPixelRect(instance.frame.value(), dpiScale);
-        const float visualScale = renderTransform.active ? renderTransform.scale : 1.0f;
         Transform transform = scaleTransform(instance.transform.value(), dpiScale);
-        if (renderTransform.active && frame.width > 0.0f && frame.height > 0.0f) {
-            transform.origin = {
-                (renderTransform.origin.x - frame.x) / frame.width,
-                (renderTransform.origin.y - frame.y) / frame.height
-            };
-            transform.scale.x *= visualScale;
-            transform.scale.y *= visualScale;
-            transform.translate.x += renderTransform.translate.x;
-            transform.translate.y += renderTransform.translate.y;
-        }
 
         instance.primitive->setBounds(frame.x, frame.y, frame.width, frame.height);
         instance.primitive->setPoints(scaledPolygonPoints(instance.points, dpiScale));
         instance.primitive->setColor(instance.color.value());
         instance.primitive->setOpacity(instance.opacity.value() * renderTransform.opacity);
-        instance.primitive->setTransform(transform);
+        instance.primitive->setTransformMatrix(combinedPrimitiveMatrix(renderTransform, frame, transform));
         instance.primitive->render(windowWidth, windowHeight);
     }
 
@@ -1857,12 +2003,10 @@ private:
         }
 
         const Rect frame = toPixelRect(instance.frame.value(), dpiScale);
-        const float visualScale = renderTransform.active ? renderTransform.scale : 1.0f;
         const float maxWidth = element.maxWidth > 0.0f ? toPixels(element.maxWidth, dpiScale) : frame.width;
         const float lineHeight = element.lineHeight > 0.0f ? toPixels(element.lineHeight, dpiScale) : 0.0f;
         Color textColor = instance.color.value();
         Transform transform = scaleTransform(instance.transform.value(), dpiScale);
-        Rect transformFrame = frame;
         textColor.a *= instance.opacity.value();
 
         float x = frame.x;
@@ -1878,32 +2022,20 @@ private:
         } else if (element.verticalAlign == VerticalAlign::Bottom) {
             y = frame.y + frame.height;
         }
-        if (renderTransform.active) {
-            x += renderTransform.translate.x;
-            y += renderTransform.translate.y;
-            transformFrame.x += renderTransform.translate.x;
-            transformFrame.y += renderTransform.translate.y;
-        }
         textColor.a *= renderTransform.opacity;
 
         instance.primitive->setPosition(x, y);
-        instance.primitive->setVisualScale(renderTransform.origin.x + renderTransform.translate.x,
-                                           renderTransform.origin.y + renderTransform.translate.y,
-                                           visualScale);
-        instance.primitive->setTransform(transform, transformFrame);
+        instance.primitive->setTransformMatrix(combinedPrimitiveMatrix(renderTransform, frame, transform));
         instance.primitive->setColor(textColor);
-        if (instance.primitiveStyleDirty) {
-            instance.primitive->setText(instance.text);
-            instance.primitive->setFontFamily(instance.fontFamily);
-            instance.primitive->setFontSize(toPixels(instance.fontSize, dpiScale));
-            instance.primitive->setFontWeight(instance.fontWeight);
-            instance.primitive->setMaxWidth(maxWidth);
-            instance.primitive->setWrap(instance.wrap);
-            instance.primitive->setHorizontalAlign(instance.horizontalAlign);
-            instance.primitive->setVerticalAlign(instance.verticalAlign);
-            instance.primitive->setLineHeight(lineHeight);
-            instance.primitiveStyleDirty = false;
-        }
+        instance.primitive->setText(instance.text);
+        instance.primitive->setFontFamily(instance.fontFamily);
+        instance.primitive->setFontSize(toPixels(instance.fontSize, dpiScale));
+        instance.primitive->setFontWeight(instance.fontWeight);
+        instance.primitive->setMaxWidth(maxWidth);
+        instance.primitive->setWrap(instance.wrap);
+        instance.primitive->setHorizontalAlign(instance.horizontalAlign);
+        instance.primitive->setVerticalAlign(instance.verticalAlign);
+        instance.primitive->setLineHeight(lineHeight);
         instance.primitive->render(windowWidth, windowHeight);
     }
 
@@ -1921,24 +2053,13 @@ private:
         }
 
         const Rect frame = toPixelRect(instance.frame.value(), dpiScale);
-        const float visualScale = renderTransform.active ? renderTransform.scale : 1.0f;
         Transform transform = scaleTransform(instance.transform.value(), dpiScale);
-        if (renderTransform.active && frame.width > 0.0f && frame.height > 0.0f) {
-            transform.origin = {
-                (renderTransform.origin.x - frame.x) / frame.width,
-                (renderTransform.origin.y - frame.y) / frame.height
-            };
-            transform.scale.x *= visualScale;
-            transform.scale.y *= visualScale;
-            transform.translate.x += renderTransform.translate.x;
-            transform.translate.y += renderTransform.translate.y;
-        }
 
         instance.primitive->setBounds(frame.x, frame.y, frame.width, frame.height);
         instance.primitive->setTint(instance.tint.value());
         instance.primitive->setCornerRadius(toPixels(instance.radius.value(), dpiScale));
         instance.primitive->setOpacity(instance.opacity.value() * renderTransform.opacity);
-        instance.primitive->setTransform(transform);
+        instance.primitive->setTransformMatrix(combinedPrimitiveMatrix(renderTransform, frame, transform));
         instance.primitive->setFit(instance.fit);
         instance.primitive->setCoverViewport(instance.hasCoverViewport,
                                              {toPixels(instance.coverViewportSize.x, dpiScale),
@@ -1958,7 +2079,7 @@ private:
     std::unordered_map<std::string, LayoutInstance> layouts_;
     std::unordered_map<std::string, TimerInstance> timers_;
     std::unordered_map<std::string, DependentVisualState> dependentVisualStates_;
-    std::unordered_map<std::string, LayoutRect> frameTargets_;
+    std::unordered_map<std::string, FrameTargetInstance> frameTargets_;
     std::vector<ElementSnapshot> elementStructure_;
     std::vector<LogicalDirtyRect> dirtyRects_;
     bool needsRender_ = true;

@@ -168,11 +168,17 @@ Rect 支持：
 .blur(...)
 .opacity(...)
 .translate(...)
+.translate3d(...)
 .translateX(...)
 .translateY(...)
+.translateZ(...)
 .scale(...)
 .rotate(...)
+.rotateX(...)
+.rotateY(...)
+.rotateZ(...)
 .rotation(...)
+.perspective(...)
 .transformOrigin(...)
 .states(normal, hover, pressed)
 ```
@@ -207,11 +213,17 @@ Text 支持：
 .color(...)
 .opacity(...)
 .translate(...)
+.translate3d(...)
 .translateX(...)
 .translateY(...)
+.translateZ(...)
 .scale(...)
 .rotate(...)
+.rotateX(...)
+.rotateY(...)
+.rotateZ(...)
 .rotation(...)
+.perspective(...)
 .transformOrigin(...)
 .maxWidth(...)
 .wrap(...)
@@ -261,8 +273,17 @@ Image 支持：
 .tint(...)
 .color(...)
 .translate(...)
+.translate3d(...)
+.translateX(...)
+.translateY(...)
+.translateZ(...)
 .scale(...)
 .rotate(...)
+.rotateX(...)
+.rotateY(...)
+.rotateZ(...)
+.perspective(...)
+.transformOrigin(...)
 ```
 
 默认 fit 是 `Cover`，图片会适应裁剪，不会强行压缩变形。
@@ -290,11 +311,67 @@ Polygon 支持：
 .color(...)
 .opacity(...)
 .translate(...)
+.translate3d(...)
+.translateX(...)
+.translateY(...)
+.translateZ(...)
 .scale(...)
 .rotate(...)
+.rotateX(...)
+.rotateY(...)
+.rotateZ(...)
+.perspective(...)
 .transformOrigin(...)
 .states(normal, hover, pressed)
 ```
+
+## Transform / 2.5D DSL
+
+Transform 是渲染阶段能力，不参与 measure / layout。所有可视元素和 `Row` / `Column` / `Stack` 容器都可以声明 transform，父容器 transform 会以投影矩阵继承到子树。
+
+```cpp
+ui.stack("flip.card")
+    .size(220.0f, 132.0f)
+    .rotateY(open ? 3.14159f : 0.0f)
+    .perspective(520.0f)
+    .transformOrigin(0.5f, 0.5f)
+    .transition(0.42f, core::Ease::OutBack)
+    .animate(core::AnimProperty::Transform)
+    .content([&] {
+        ui.rect("flip.card.bg")
+            .size(220.0f, 132.0f)
+            .radius(18.0f)
+            .color({0.18f, 0.28f, 0.72f, 1.0f})
+            .build();
+    })
+    .build();
+```
+
+2D API：
+
+```cpp
+.translate(x, y)
+.translateX(x)
+.translateY(y)
+.scale(value)
+.scale(x, y)
+.rotate(radians)
+.rotateZ(radians)
+.rotation(radians)
+.transformOrigin(xRatio, yRatio)
+```
+
+2.5D API：
+
+```cpp
+.translate3d(x, y, z)
+.translateZ(z)
+.rotateX(radians)
+.rotateY(radians)
+.perspective(distance)
+```
+
+`rotateX` / `rotateY` 会把元素所在平面投影回屏幕坐标；`perspective(distance)` 是透视距离，值越小透视越强，`0` 表示关闭透视。`translateZ` 只有配合 perspective 才会产生明显视觉缩放。当前不会启用真实 depth buffer，绘制顺序仍由 DSL 树顺序和 `zIndex` 决定；hit-test 仍按未 transform 的布局 frame 计算。
 
 ## 动画 DSL
 
@@ -313,6 +390,8 @@ ui.rect("actor")
 ```
 
 Frame 动画需要显式 `.animate(core::AnimProperty::Frame)`。窗口大小变化、页面切换导致的普通布局尺寸变化不会默认产生长宽动画。
+
+容器 `Row` / `Column` / `Stack` 也支持 `opacity` 和 transform。Runtime 会把容器的 `translate`、`scale`、`rotate`、`rotateX`、`rotateY`、`translateZ`、`perspective`、`transformOrigin` 组合成投影矩阵并继承到子树，因此弹窗、下拉、菜单、卡片翻转和透视动画会作用到内部 Rect / Text / Image / Polygon。布局占位仍由未 transform 的逻辑 frame 决定。
 
 当前可动画属性：
 
@@ -376,6 +455,7 @@ components::button(ui, "save")
 - 持有 `Ui`。
 - 调用 `ui.layout()` 计算逻辑坐标。
 - 按 id 缓存 Rect / Text / Image / Polygon primitive 实例。
+- 每帧回收已经不在 DSL 树里的 primitive、交互状态和 dirty key 实例。
 - 统一处理 pointer event、hit-test、press capture、click。
 - 维护 hover / press 动画状态。
 - 推进 transition 动画。
@@ -394,5 +474,4 @@ components::button(ui, "save")
 - 还没有事件冒泡。
 - 已有 click / press / release / hover changed / context menu / text input / scroll / drag 回调；更顺手的手势开发优先用 `components::mouseArea`。
 - transform 后的 hit-test 仍按布局矩形计算。
-- id 移除后的实例缓存目前不会主动回收，只是不再绘制。
 - 脏区渲染是保守矩形，复杂重叠场景可能扩大重绘区域。

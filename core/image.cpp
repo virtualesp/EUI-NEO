@@ -567,6 +567,12 @@ void ImagePrimitive::setOpacity(float opacity) {
 
 void ImagePrimitive::setTransform(const Transform& transform) {
     transform_ = transform;
+    hasTransformMatrix_ = false;
+}
+
+void ImagePrimitive::setTransformMatrix(const TransformMatrix& matrix) {
+    transformMatrix_ = matrix;
+    hasTransformMatrix_ = true;
 }
 
 void ImagePrimitive::setFit(ImageFit fit) {
@@ -638,7 +644,7 @@ void ImagePrimitive::render(int windowWidth, int windowHeight) {
         return;
     }
 
-    float vertices[36] = {};
+    float vertices[42] = {};
     rebuildVertices(vertices);
 
     const GLboolean blendEnabled = glIsEnabled(GL_BLEND);
@@ -699,7 +705,7 @@ bool ImagePrimitive::retainSharedResources() {
 
     const char* vertexSource =
         "#version 330 core\n"
-        "layout(location = 0) in vec2 aScreenPos;\n"
+        "layout(location = 0) in vec3 aScreenPos;\n"
         "layout(location = 1) in vec2 aLocalPos;\n"
         "layout(location = 2) in vec2 aUV;\n"
         "uniform vec2 uWindowSize;\n"
@@ -710,7 +716,7 @@ bool ImagePrimitive::retainSharedResources() {
         "    vUV = aUV;\n"
         "    vec2 ndc = vec2((aScreenPos.x / uWindowSize.x) * 2.0 - 1.0,\n"
         "                    1.0 - (aScreenPos.y / uWindowSize.y) * 2.0);\n"
-        "    gl_Position = vec4(ndc, 0.0, 1.0);\n"
+        "    gl_Position = vec4(ndc * aScreenPos.z, 0.0, aScreenPos.z);\n"
         "}\n";
 
     const char* fragmentSource =
@@ -775,12 +781,12 @@ bool ImagePrimitive::retainSharedResources() {
     glGenBuffers(1, &resources.vbo);
     glBindVertexArray(resources.vao);
     glBindBuffer(GL_ARRAY_BUFFER, resources.vbo);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(float) * 36, nullptr, GL_DYNAMIC_DRAW);
-    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(float) * 6, nullptr);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(float) * 42, nullptr, GL_DYNAMIC_DRAW);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(float) * 7, nullptr);
     glEnableVertexAttribArray(0);
-    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(float) * 6, reinterpret_cast<void*>(sizeof(float) * 2));
+    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(float) * 7, reinterpret_cast<void*>(sizeof(float) * 3));
     glEnableVertexAttribArray(1);
-    glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(float) * 6, reinterpret_cast<void*>(sizeof(float) * 4));
+    glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(float) * 7, reinterpret_cast<void*>(sizeof(float) * 5));
     glEnableVertexAttribArray(2);
     glBindBuffer(GL_ARRAY_BUFFER, 0);
     glBindVertexArray(0);
@@ -981,7 +987,11 @@ GLuint ImagePrimitive::loadTexture(const std::string& source, bool flipVerticall
     return texture;
 }
 
-Vec2 ImagePrimitive::transformPoint(float x, float y) const {
+Vec3 ImagePrimitive::transformPoint(float x, float y) const {
+    if (hasTransformMatrix_) {
+        return core::transformPointWithW(transformMatrix_, x, y);
+    }
+
     const Vec2 origin = {
         bounds_.x + bounds_.width * transform_.origin.x,
         bounds_.y + bounds_.height * transform_.origin.y
@@ -994,7 +1004,8 @@ Vec2 ImagePrimitive::transformPoint(float x, float y) const {
 
     return {
         origin.x + scaledX * cosine - scaledY * sine + transform_.translate.x,
-        origin.y + scaledX * sine + scaledY * cosine + transform_.translate.y
+        origin.y + scaledX * sine + scaledY * cosine + transform_.translate.y,
+        1.0f
     };
 }
 
@@ -1012,7 +1023,7 @@ void ImagePrimitive::rebuildVertices(float* vertices) const {
         }
     }
 
-    const Vec2 screen[4] = {
+    const Vec3 screen[4] = {
         transformPoint(drawRect.x, drawRect.y),
         transformPoint(drawRect.x + drawRect.width, drawRect.y),
         transformPoint(drawRect.x + drawRect.width, drawRect.y + drawRect.height),
@@ -1073,13 +1084,14 @@ void ImagePrimitive::rebuildVertices(float* vertices) const {
 
     for (int i = 0; i < 6; ++i) {
         const int index = order[i];
-        const int offset = i * 6;
+        const int offset = i * 7;
         vertices[offset + 0] = screen[index].x;
         vertices[offset + 1] = screen[index].y;
-        vertices[offset + 2] = local[index].x;
-        vertices[offset + 3] = local[index].y;
-        vertices[offset + 4] = uv[index].x;
-        vertices[offset + 5] = uv[index].y;
+        vertices[offset + 2] = screen[index].z;
+        vertices[offset + 3] = local[index].x;
+        vertices[offset + 4] = local[index].y;
+        vertices[offset + 5] = uv[index].x;
+        vertices[offset + 6] = uv[index].y;
     }
 }
 

@@ -87,6 +87,7 @@ public:
     void setStyle(const TextStyle& style);
     void setVisualScale(float originX, float originY, float scale);
     void setTransform(const Transform& transform, const Rect& frame);
+    void setTransformMatrix(const TransformMatrix& matrix);
 
     const TextStyle& style() const;
     Vec2 position() const;
@@ -135,6 +136,8 @@ private:
     float visualScale_ = 1.0f;
     Transform transform_;
     Rect transformFrame_;
+    TransformMatrix transformMatrix_;
+    bool hasTransformMatrix_ = false;
     TextStyle style_;
     std::shared_ptr<void> fontInfoStorage_;
     float scale_ = 1.0f;

@@ -1163,11 +1163,19 @@ void TextPrimitive::setWrap(bool wrap) {
 }
 
 void TextPrimitive::setHorizontalAlign(HorizontalAlign align) {
+    if (style_.horizontalAlign == align) {
+        return;
+    }
     style_.horizontalAlign = align;
+    invalidateVertices();
 }
 
 void TextPrimitive::setVerticalAlign(VerticalAlign align) {
+    if (style_.verticalAlign == align) {
+        return;
+    }
     style_.verticalAlign = align;
+    invalidateVertices();
 }
 
 void TextPrimitive::setLineHeight(float lineHeight) {
@@ -1197,9 +1205,13 @@ void TextPrimitive::setTransform(const Transform& transform, const Rect& frame) 
     };
     const bool sameTransform =
         closeVec(transform_.translate, transform.translate) &&
+        close(transform_.translateZ, transform.translateZ) &&
         closeVec(transform_.scale, transform.scale) &&
         close(transform_.rotate, transform.rotate) &&
-        closeVec(transform_.origin, transform.origin);
+        close(transform_.rotateX, transform.rotateX) &&
+        close(transform_.rotateY, transform.rotateY) &&
+        closeVec(transform_.origin, transform.origin) &&
+        close(transform_.perspective, transform.perspective);
     const bool sameFrame =
         close(transformFrame_.x, frame.x) &&
         close(transformFrame_.y, frame.y) &&
@@ -1210,6 +1222,30 @@ void TextPrimitive::setTransform(const Transform& transform, const Rect& frame) 
     }
     transform_ = transform;
     transformFrame_ = frame;
+    hasTransformMatrix_ = false;
+    invalidateVertices();
+}
+
+void TextPrimitive::setTransformMatrix(const TransformMatrix& matrix) {
+    auto close = [](float left, float right) {
+        return std::fabs(left - right) <= 0.0001f;
+    };
+    const bool same =
+        close(transformMatrix_.m00, matrix.m00) &&
+        close(transformMatrix_.m01, matrix.m01) &&
+        close(transformMatrix_.tx, matrix.tx) &&
+        close(transformMatrix_.m10, matrix.m10) &&
+        close(transformMatrix_.m11, matrix.m11) &&
+        close(transformMatrix_.ty, matrix.ty) &&
+        close(transformMatrix_.px, matrix.px) &&
+        close(transformMatrix_.py, matrix.py) &&
+        close(transformMatrix_.pw, matrix.pw) &&
+        hasTransformMatrix_;
+    if (same) {
+        return;
+    }
+    transformMatrix_ = matrix;
+    hasTransformMatrix_ = true;
     invalidateVertices();
 }
 
@@ -1556,7 +1592,12 @@ void TextPrimitive::rebuildVertices() {
             Vec2 p2{x1, y1};
             Vec2 p3{x0, y1};
 
-            if (std::fabs(transform_.translate.x) > 0.0001f ||
+            if (hasTransformMatrix_) {
+                p0 = core::transformPoint(transformMatrix_, p0.x, p0.y);
+                p1 = core::transformPoint(transformMatrix_, p1.x, p1.y);
+                p2 = core::transformPoint(transformMatrix_, p2.x, p2.y);
+                p3 = core::transformPoint(transformMatrix_, p3.x, p3.y);
+            } else if (std::fabs(transform_.translate.x) > 0.0001f ||
                 std::fabs(transform_.translate.y) > 0.0001f ||
                 std::fabs(transform_.scale.x - 1.0f) > 0.0001f ||
                 std::fabs(transform_.scale.y - 1.0f) > 0.0001f ||
@@ -1581,7 +1622,7 @@ void TextPrimitive::rebuildVertices() {
                 p3 = transformPoint(p3);
             }
 
-            if (std::fabs(visualScale_ - 1.0f) > 0.0001f) {
+            if (!hasTransformMatrix_ && std::fabs(visualScale_ - 1.0f) > 0.0001f) {
                 auto scalePoint = [&](Vec2 point) {
                     return Vec2{
                         visualScaleOrigin_.x + (point.x - visualScaleOrigin_.x) * visualScale_,

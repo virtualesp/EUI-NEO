@@ -29,6 +29,9 @@ bool animationFaded = false;
 bool animationScaled = false;
 bool animationRounded = false;
 bool animationGlowing = false;
+bool animationFlipX = false;
+bool animationFlipY = false;
+bool animationPerspective = false;
 bool sampleChecked = true;
 bool sampleSwitch = true;
 bool sampleRadioA = true;
@@ -1277,11 +1280,13 @@ void composeStylePage(core::dsl::Ui& ui, float width, float height) {
 void composeAnimationPage(core::dsl::Ui& ui, float width, float height) {
     (void)height;
     const float stageWidth = std::max(280.0f, std::min(width, 860.0f));
-    const float stageHeight = 268.0f;
-    const float actorWidth = animationRotated ? 150.0f : 118.0f;
-    const float actorHeight = animationRotated ? 96.0f : 72.0f;
+    const float stageHeight = 252.0f;
+    const float actorWidth = std::max(220.0f, std::min(320.0f, stageWidth * 0.40f));
+    const float actorHeight = 152.0f;
     const float actorScale = animationScaled ? 1.18f : 1.0f;
-    const float actorTravel = std::max(46.0f, stageWidth - actorWidth * actorScale - 58.0f);
+    const float actorBaseX = 46.0f;
+    const float actorBaseY = 50.0f;
+    const float actorTravel = std::max(0.0f, stageWidth - actorWidth * actorScale - 180.0f - actorBaseX);
     const float buttonWidth = std::max(92.0f, std::min(166.0f, (stageWidth - 36.0f) / 3.0f));
     const float buttonRowWidth = buttonWidth * 3.0f + 36.0f;
     const core::Color rotateColor{0.84f, 0.46f, 0.60f, 1.0f};
@@ -1289,6 +1294,26 @@ void composeAnimationPage(core::dsl::Ui& ui, float width, float height) {
     const core::Color scaleColor{0.92f, 0.62f, 0.26f, 1.0f};
     const core::Color radiusColor{0.50f, 0.58f, 0.94f, 1.0f};
     const core::Color glowColor{0.28f, 0.76f, 0.72f, 1.0f};
+    const core::Color flipXColor{0.74f, 0.46f, 0.92f, 1.0f};
+    const core::Color flipYColor{0.34f, 0.68f, 0.94f, 1.0f};
+    const core::Color perspectiveColor{0.94f, 0.66f, 0.30f, 1.0f};
+    const bool perspectiveActive = animationFlipX || animationFlipY || animationPerspective;
+
+    auto matrixButton = [&](const std::string& id, const char* label, bool active, const core::Color& color, const std::function<void()>& onClick) {
+        components::button(ui, id)
+            .size(buttonWidth, 50.0f)
+            .text(label)
+            .colors(active ? color : surfaceSoft(),
+                    buttonHover(active ? color : surfaceSoft()),
+                    buttonPressed(active ? color : surfaceSoft()))
+            .textColor(active || optionNight ? core::Color{0.94f, 0.97f, 1.0f, 1.0f} : textPrimary())
+            .iconColor(active || optionNight ? core::Color{0.94f, 0.97f, 1.0f, 1.0f} : textPrimary())
+            .border(1.0f, active ? withAlpha(color, 0.58f) : borderColor(0.70f))
+            .shadow(12.0f, 0.0f, 4.0f, shadowColor(0.18f, 0.08f))
+            .onClick(onClick)
+            .transition(pageTransition())
+            .build();
+    };
 
     ui.row("animation.controls")
         .size(buttonRowWidth, 58.0f)
@@ -1384,6 +1409,21 @@ void composeAnimationPage(core::dsl::Ui& ui, float width, float height) {
                 .build();
         });
 
+    ui.row("animation.controls.matrix")
+        .size(buttonRowWidth, 58.0f)
+        .gap(18.0f)
+        .content([&] {
+            matrixButton("anim.matrix.flipX", "Flip X", animationFlipX, flipXColor, [] {
+                animationFlipX = !animationFlipX;
+            });
+            matrixButton("anim.matrix.flipY", "Flip Y", animationFlipY, flipYColor, [] {
+                animationFlipY = !animationFlipY;
+            });
+            matrixButton("anim.matrix.depth", "Depth", animationPerspective, perspectiveColor, [] {
+                animationPerspective = !animationPerspective;
+            });
+        });
+
     ui.stack("animation.stage")
         .size(stageWidth, stageHeight)
         .content([&] {
@@ -1396,27 +1436,93 @@ void composeAnimationPage(core::dsl::Ui& ui, float width, float height) {
 
             ui.rect("animation.stage.track")
                 .x(38.0f)
-                .y(stageHeight - 54.0f)
+                .y(stageHeight - 38.0f)
                 .size(std::max(0.0f, stageWidth - 76.0f), 2.0f)
                 .color(borderColor(0.48f))
                 .radius(1.0f)
                 .build();
 
-            ui.rect("animation.actor")
-                .x(animationMoved ? actorTravel : 46.0f)
-                .y(animationMoved ? 70.0f : 92.0f)
+            ui.stack("animation.actor.card")
+                .x(actorBaseX)
+                .y(actorBaseY)
                 .size(actorWidth, actorHeight)
-                .color(animationMoved ? accent() : radiusColor)
-                .radius(animationRounded ? actorHeight * 0.5f : (animationRotated ? 30.0f : 18.0f))
-                .rotate(animationRotated ? 0.42f : 0.0f)
+                .translate(animationMoved ? actorTravel : 0.0f, animationMoved ? -12.0f : 0.0f)
+                .rotate(animationRotated ? 0.34f : 0.0f)
+                .rotateX(animationFlipX ? 0.82f : 0.0f)
+                .rotateY(animationFlipY ? -0.72f : (animationPerspective ? 0.42f : 0.0f))
+                .translateZ(animationPerspective ? 72.0f : 0.0f)
+                .perspective(480.0f)
                 .scale(actorScale)
                 .transformOrigin(0.5f, 0.5f)
                 .opacity(animationFaded ? 0.36f : 1.0f)
-                .shadow(animationGlowing ? 44.0f : 26.0f, 0.0f, animationGlowing ? 18.0f : 12.0f,
-                        animationGlowing ? withAlpha(glowColor, optionNight ? 0.42f : 0.26f) : shadowColor(0.32f, 0.16f))
                 .transition(motionTransition())
-                .animate(core::AnimProperty::Frame | core::AnimProperty::Color | core::AnimProperty::Opacity |
-                         core::AnimProperty::Radius | core::AnimProperty::Shadow | core::AnimProperty::Transform)
+                .animate(core::AnimProperty::Opacity | core::AnimProperty::Transform)
+                .content([&] {
+                    ui.rect("animation.actor.bg")
+                        .size(actorWidth, actorHeight)
+                        .color(animationMoved ? accent() : radiusColor)
+                        .radius(animationRounded ? 36.0f : 20.0f)
+                        .border(1.0f, perspectiveActive ? withAlpha(flipXColor, 0.48f) : borderColor(0.70f))
+                        .shadow(animationGlowing ? 44.0f : 26.0f, 0.0f, animationGlowing ? 0.0f : 12.0f,
+                                animationGlowing ? withAlpha(glowColor, optionNight ? 0.42f : 0.26f) : shadowColor(0.32f, 0.16f))
+                        .transition(motionTransition())
+                        .animate(core::AnimProperty::Color | core::AnimProperty::Radius | core::AnimProperty::Shadow)
+                        .build();
+
+                    ui.rect("animation.actor.chip.primary")
+                        .x(24.0f)
+                        .y(24.0f)
+                        .size(actorWidth * 0.36f, 34.0f)
+                        .color(perspectiveActive ? flipXColor : withAlpha(textPrimary(), 0.88f))
+                        .radius(12.0f)
+                        .transition(motionTransition())
+                        .animate(core::AnimProperty::Color)
+                        .build();
+
+                    ui.rect("animation.actor.chip.secondary")
+                        .x(actorWidth * 0.56f)
+                        .y(24.0f)
+                        .size(actorWidth * 0.26f, 34.0f)
+                        .color(perspectiveActive ? flipYColor : withAlpha(textPrimary(), 0.72f))
+                        .radius(12.0f)
+                        .transition(motionTransition())
+                        .animate(core::AnimProperty::Color)
+                        .build();
+
+                    ui.image("animation.actor.icon")
+                        .x(actorWidth - 84.0f)
+                        .y(actorHeight - 82.0f)
+                        .size(54.0f, 54.0f)
+                        .source("assets/icon.png")
+                        .cover()
+                        .radius(13.0f)
+                        .build();
+
+                    ui.text("animation.actor.title")
+                        .x(24.0f)
+                        .y(76.0f)
+                        .size(std::max(0.0f, actorWidth - 118.0f), 30.0f)
+                        .text(animationFlipX ? "Flip X" : (animationFlipY ? "Flip Y" : (animationPerspective ? "Depth" : "Motion")))
+                        .fontSize(24.0f)
+                        .lineHeight(29.0f)
+                        .color(core::Color{0.96f, 0.97f, 1.0f, 1.0f})
+                        .transition(motionTransition())
+                        .animate(core::AnimProperty::TextColor)
+                        .build();
+
+                    ui.text("animation.actor.note")
+                        .x(24.0f)
+                        .y(110.0f)
+                        .size(std::max(0.0f, actorWidth - 118.0f), 24.0f)
+                        .text(animationFlipX ? "rotateX + perspective" :
+                              (animationFlipY ? "rotateY + translateZ" :
+                              (animationPerspective ? "translateZ + perspective" : "one card, many transforms")))
+                        .fontSize(15.0f)
+                        .lineHeight(20.0f)
+                        .color(withAlpha(core::Color{0.96f, 0.97f, 1.0f, 1.0f}, 0.74f))
+                        .horizontalAlign(core::HorizontalAlign::Center)
+                        .build();
+                })
                 .build();
         });
 }

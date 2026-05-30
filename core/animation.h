@@ -161,9 +161,13 @@ inline bool closeEnough(const Shadow& left, const Shadow& right, float epsilon =
 
 inline bool closeEnough(const Transform& left, const Transform& right, float epsilon = 0.001f) {
     return closeEnough(left.translate, right.translate, epsilon) &&
+           closeEnough(left.translateZ, right.translateZ, epsilon) &&
            closeEnough(left.scale, right.scale, epsilon) &&
            closeEnough(left.rotate, right.rotate, epsilon) &&
-           closeEnough(left.origin, right.origin, epsilon);
+           closeEnough(left.rotateX, right.rotateX, epsilon) &&
+           closeEnough(left.rotateY, right.rotateY, epsilon) &&
+           closeEnough(left.origin, right.origin, epsilon) &&
+           closeEnough(left.perspective, right.perspective, epsilon);
 }
 
 inline bool closeEnoughSmoothTarget(float left, float right) {
@@ -229,9 +233,13 @@ inline Shadow lerpValue(Shadow from, Shadow to, float amount) {
 inline Transform lerpValue(const Transform& from, const Transform& to, float amount) {
     return {
         lerpValue(from.translate, to.translate, amount),
+        lerpValue(from.translateZ, to.translateZ, amount),
         lerpValue(from.scale, to.scale, amount),
         lerpValue(from.rotate, to.rotate, amount),
-        lerpValue(from.origin, to.origin, amount)
+        lerpValue(from.rotateX, to.rotateX, amount),
+        lerpValue(from.rotateY, to.rotateY, amount),
+        lerpValue(from.origin, to.origin, amount),
+        lerpValue(from.perspective, to.perspective, amount)
     };
 }
 
