@@ -948,6 +948,7 @@ private:
 
         const std::string oldId = focusedId_;
         focusedId_ = id;
+        imeCursorRectValid_ = false;
         ui_.setFocusedId(focusedId_);
 
         if (const Element* oldElement = ui_.find(oldId)) {
@@ -993,12 +994,18 @@ private:
     }
 
     void updateImeCursorRect(GLFWwindow* window, float dpiScale) {
-        if (window == nullptr || focusedId_.empty()) {
+        if (window == nullptr) {
+            imeCursorRectValid_ = false;
+            return;
+        }
+        if (focusedId_.empty()) {
+            imeCursorRectValid_ = false;
             return;
         }
 
         const Element* element = ui_.find(focusedId_);
         if (element == nullptr || !element->hasImeRect) {
+            imeCursorRectValid_ = false;
             return;
         }
 
@@ -1009,6 +1016,14 @@ private:
             element->imeRect.height
         };
         const Rect pixelRect = toPixelRect(logicalRect, dpiScale);
+        if (imeCursorRectValid_ &&
+            imeCursorWindow_ == window &&
+            closeEnough(imeCursorRect_, pixelRect)) {
+            return;
+        }
+        imeCursorWindow_ = window;
+        imeCursorRect_ = pixelRect;
+        imeCursorRectValid_ = true;
         core::platform::setImeCursorRect(
             window,
             pixelRect.x,
@@ -1961,6 +1976,9 @@ private:
     GLFWcursor* arrowCursor_ = nullptr;
     GLFWcursor* handCursor_ = nullptr;
     GLFWcursor* currentCursor_ = nullptr;
+    GLFWwindow* imeCursorWindow_ = nullptr;
+    Rect imeCursorRect_;
+    bool imeCursorRectValid_ = false;
 };
 
 } // namespace core::dsl
