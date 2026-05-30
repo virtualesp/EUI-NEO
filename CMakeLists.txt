@@ -20,6 +20,7 @@ endif()
 option(EUI_ENABLE_HARFBUZZ "Enable HarfBuzz shaping for complex text" ON)
 
 set(EUI_THIRD_PARTY_DIR "${CMAKE_CURRENT_SOURCE_DIR}/3rd")
+list(PREPEND CMAKE_MODULE_PATH "${EUI_THIRD_PARTY_DIR}")
 
 function(eui_use_bundled_dependency out_var dep_name source_dir marker_file)
     if(EUI_DEPS_MODE STREQUAL "fetch")
@@ -134,6 +135,20 @@ eui_use_bundled_dependency(
     "CMakeLists.txt"
 )
 
+eui_use_bundled_dependency(
+    EUI_USE_BUNDLED_ZLIB
+    "zlib"
+    "${EUI_THIRD_PARTY_DIR}/zlib-1.3.1"
+    "zlib.h"
+)
+
+eui_use_bundled_dependency(
+    EUI_USE_BUNDLED_LIBPNG
+    "libpng"
+    "${EUI_THIRD_PARTY_DIR}/libpng-1.6.43"
+    "png.h"
+)
+
 if(EUI_ENABLE_HARFBUZZ)
     eui_use_bundled_dependency(
         EUI_USE_BUNDLED_HARFBUZZ
@@ -146,9 +161,62 @@ endif()
 find_package(OpenGL REQUIRED)
 find_package(Threads REQUIRED)
 
+if(EUI_USE_BUNDLED_ZLIB)
+    set(EUI_ZLIB_DIR "${EUI_THIRD_PARTY_DIR}/zlib-1.3.1")
+    add_library(eui_zlib STATIC
+        "${EUI_ZLIB_DIR}/adler32.c"
+        "${EUI_ZLIB_DIR}/compress.c"
+        "${EUI_ZLIB_DIR}/crc32.c"
+        "${EUI_ZLIB_DIR}/deflate.c"
+        "${EUI_ZLIB_DIR}/gzclose.c"
+        "${EUI_ZLIB_DIR}/gzlib.c"
+        "${EUI_ZLIB_DIR}/gzread.c"
+        "${EUI_ZLIB_DIR}/gzwrite.c"
+        "${EUI_ZLIB_DIR}/inflate.c"
+        "${EUI_ZLIB_DIR}/infback.c"
+        "${EUI_ZLIB_DIR}/inftrees.c"
+        "${EUI_ZLIB_DIR}/inffast.c"
+        "${EUI_ZLIB_DIR}/trees.c"
+        "${EUI_ZLIB_DIR}/uncompr.c"
+        "${EUI_ZLIB_DIR}/zutil.c"
+    )
+    target_include_directories(eui_zlib PUBLIC "${EUI_ZLIB_DIR}")
+    if(UNIX)
+        target_compile_definitions(eui_zlib PRIVATE HAVE_UNISTD_H)
+    endif()
+    set_target_properties(eui_zlib PROPERTIES POSITION_INDEPENDENT_CODE ON)
+    if(NOT TARGET ZLIB::ZLIB)
+        add_library(ZLIB::ZLIB ALIAS eui_zlib)
+    endif()
+else()
+    find_package(ZLIB REQUIRED)
+endif()
+
+if(EUI_USE_BUNDLED_LIBPNG)
+    set(PNG_SHARED OFF CACHE BOOL "Build libpng as a shared library" FORCE)
+    set(PNG_STATIC ON CACHE BOOL "Build libpng as a static library" FORCE)
+    set(PNG_FRAMEWORK OFF CACHE BOOL "Build libpng as a framework bundle" FORCE)
+    set(PNG_TESTS OFF CACHE BOOL "Build the libpng tests" FORCE)
+    set(PNG_TOOLS OFF CACHE BOOL "Build the libpng tools" FORCE)
+    set(PNG_EXECUTABLES OFF CACHE BOOL "Build the libpng executables" FORCE)
+    set(PNG_BUILD_ZLIB OFF CACHE BOOL "Use find_package(ZLIB) for libpng" FORCE)
+    set(PNG_HARDWARE_OPTIMIZATIONS OFF CACHE BOOL "Disable libpng hardware optimizations for portable bundled builds" FORCE)
+    set(SKIP_INSTALL_ALL ON CACHE BOOL "Disable install rules for bundled libpng" FORCE)
+    add_subdirectory("${EUI_THIRD_PARTY_DIR}/libpng-1.6.43" "${CMAKE_CURRENT_BINARY_DIR}/_deps/libpng-bundled-build" EXCLUDE_FROM_ALL)
+    if(TARGET png_static)
+        target_include_directories(png_static PUBLIC "$<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/_deps/libpng-bundled-build>")
+    endif()
+    if(TARGET png_static AND NOT TARGET PNG::PNG)
+        add_library(PNG::PNG ALIAS png_static)
+    endif()
+else()
+    find_package(PNG REQUIRED)
+endif()
+
 set(FT_DISABLE_ZLIB ON CACHE BOOL "Disable zlib support in bundled FreeType" FORCE)
 set(FT_DISABLE_BZIP2 ON CACHE BOOL "Disable bzip2 support in bundled FreeType" FORCE)
-set(FT_DISABLE_PNG ON CACHE BOOL "Disable png support in bundled FreeType" FORCE)
+set(FT_DISABLE_PNG OFF CACHE BOOL "Disable png support in bundled FreeType" FORCE)
+set(FT_REQUIRE_PNG ON CACHE BOOL "Require png support in bundled FreeType" FORCE)
 set(FT_DISABLE_HARFBUZZ ON CACHE BOOL "Disable HarfBuzz support in bundled FreeType" FORCE)
 set(FT_DISABLE_BROTLI ON CACHE BOOL "Disable brotli support in bundled FreeType" FORCE)
 if(EUI_USE_BUNDLED_FREETYPE)

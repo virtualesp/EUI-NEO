@@ -99,6 +99,8 @@ public:
             state.selectionEnd = state.cursor;
             state.horizontalScroll = 0.0f;
             state.verticalScroll = 0.0f;
+            state.undoStack.clear();
+            state.redoStack.clear();
         }
         state.cursor = clampUtf8Boundary(state.text, state.cursor);
         state.selectionStart = clampUtf8Boundary(state.text, state.selectionStart);
@@ -157,6 +159,31 @@ public:
                     .onTextInput([&state, allowMultiline, onChange, onEnter, width, inset, fontSize, fontFamily, textHeight](const core::KeyboardEvent& event) {
                         bool changed = false;
 
+                        if (event.undo || event.redo) {
+                            changed = event.undo ? undoEdit(state) : redoEdit(state);
+                            if (allowMultiline) {
+                                state.horizontalScroll = 0.0f;
+                                const InputLayout nextLayout = InputLayout::build(
+                                    state,
+                                    std::max(0.0f, width - inset * 2.0f),
+                                    textHeight,
+                                    width,
+                                    inset,
+                                    0.0f,
+                                    fontSize,
+                                    fontFamily,
+                                    fontSize,
+                                    allowMultiline);
+                                syncVerticalScroll(state, nextLayout, textHeight);
+                            } else {
+                                syncScroll(state, std::max(0.0f, width - inset * 2.0f), fontFamily, fontSize);
+                            }
+                            if (changed && onChange) {
+                                onChange(state.text);
+                            }
+                            return;
+                        }
+
                         if (event.selectAll) {
                             state.selectionStart = 0;
                             state.selectionEnd = static_cast<int>(state.text.size());
@@ -167,6 +194,7 @@ public:
                         }
                         if (event.cut && hasTextSelection(state)) {
                             copySelection(state);
+                            pushUndoState(state);
                             eraseSelection(state);
                             changed = true;
                         }
@@ -198,10 +226,12 @@ public:
                         }
                         if (event.del) {
                             if (hasTextSelection(state)) {
+                                pushUndoState(state);
                                 eraseSelection(state);
                                 changed = true;
                             } else if (state.cursor < static_cast<int>(state.text.size())) {
                                 const int next = nextCursorIndex(state, fontFamily, fontSize, allowMultiline, std::max(0.0f, width - inset * 2.0f));
+                                pushUndoState(state);
                                 state.text.erase(static_cast<std::size_t>(state.cursor), static_cast<std::size_t>(next - state.cursor));
                                 ++state.textRevision;
                                 changed = true;
@@ -209,10 +239,12 @@ public:
                         }
                         if (event.backspace) {
                             if (hasTextSelection(state)) {
+                                pushUndoState(state);
                                 eraseSelection(state);
                                 changed = true;
                             } else if (state.cursor > 0) {
                                 const int previous = prevCursorIndex(state, fontFamily, fontSize, allowMultiline, std::max(0.0f, width - inset * 2.0f));
+                                pushUndoState(state);
                                 state.text.erase(static_cast<std::size_t>(previous), static_cast<std::size_t>(state.cursor - previous));
                                 ++state.textRevision;
                                 state.cursor = previous;
@@ -221,15 +253,18 @@ public:
                             }
                         }
                         if (!event.text.empty()) {
+                            pushUndoState(state);
                             insertAtCursor(state, filteredText(event.text, allowMultiline));
                             changed = true;
                         }
                         if (!event.pasteText.empty()) {
+                            pushUndoState(state);
                             insertAtCursor(state, filteredText(event.pasteText, allowMultiline));
                             changed = true;
                         }
                         if (event.enter) {
                             if (allowMultiline) {
+                                pushUndoState(state);
                                 insertAtCursor(state, "\n");
                                 changed = true;
                             } else if (onEnter) {
@@ -302,6 +337,13 @@ private:
         float height = 0.0f;
     };
 
+    struct EditSnapshot {
+        std::string text;
+        int cursor = 0;
+        int selectionStart = 0;
+        int selectionEnd = 0;
+    };
+
     struct InputState {
         std::string text;
         int cursor = 0;
@@ -324,6 +366,8 @@ private:
         std::vector<TextLine> cachedLines;
         float cachedTextWidth = 0.0f;
         bool layoutCacheValid = false;
+        std::vector<EditSnapshot> undoStack;
+        std::vector<EditSnapshot> redoStack;
     };
 
     struct InputLayout {
@@ -577,6 +621,62 @@ private:
         state.selectionStart = state.cursor;
         state.selectionEnd = state.cursor;
         state.dragAnchor = state.cursor;
+    }
+
+    static EditSnapshot snapshotFor(const InputState& state) {
+        return {state.text, state.cursor, state.selectionStart, state.selectionEnd};
+    }
+
+    static bool sameSnapshot(const EditSnapshot& snapshot, const InputState& state) {
+        return snapshot.text == state.text &&
+               snapshot.cursor == state.cursor &&
+               snapshot.selectionStart == state.selectionStart &&
+               snapshot.selectionEnd == state.selectionEnd;
+    }
+
+    static void restoreSnapshot(InputState& state, const EditSnapshot& snapshot) {
+        state.text = snapshot.text;
+        state.cursor = clampUtf8Boundary(state.text, snapshot.cursor);
+        state.selectionStart = clampUtf8Boundary(state.text, snapshot.selectionStart);
+        state.selectionEnd = clampUtf8Boundary(state.text, snapshot.selectionEnd);
+        state.dragAnchor = state.cursor;
+        state.hasPreferredCursorX = false;
+        ++state.textRevision;
+    }
+
+    static void pushUndoState(InputState& state) {
+        if (!state.undoStack.empty() && sameSnapshot(state.undoStack.back(), state)) {
+            state.redoStack.clear();
+            return;
+        }
+        constexpr size_t kMaxUndoDepth = 128;
+        state.undoStack.push_back(snapshotFor(state));
+        if (state.undoStack.size() > kMaxUndoDepth) {
+            state.undoStack.erase(state.undoStack.begin());
+        }
+        state.redoStack.clear();
+    }
+
+    static bool undoEdit(InputState& state) {
+        if (state.undoStack.empty()) {
+            return false;
+        }
+        state.redoStack.push_back(snapshotFor(state));
+        const EditSnapshot snapshot = state.undoStack.back();
+        state.undoStack.pop_back();
+        restoreSnapshot(state, snapshot);
+        return true;
+    }
+
+    static bool redoEdit(InputState& state) {
+        if (state.redoStack.empty()) {
+            return false;
+        }
+        state.undoStack.push_back(snapshotFor(state));
+        const EditSnapshot snapshot = state.redoStack.back();
+        state.redoStack.pop_back();
+        restoreSnapshot(state, snapshot);
+        return true;
     }
 
     static void eraseSelection(InputState& state) {

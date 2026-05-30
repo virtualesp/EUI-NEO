@@ -29,6 +29,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <memory>
+#include <limits>
 #include <string>
 #include <unordered_map>
 #include <utility>
@@ -51,6 +52,7 @@ struct FontFace {
     float ascent = 0.0f;
     float descent = 0.0f;
     float lineGap = 0.0f;
+    float glyphScale = 1.0f;
     bool colored = false;
 
     FontFace() = default;
@@ -74,6 +76,7 @@ struct FontFace {
         ascent = other.ascent;
         descent = other.descent;
         lineGap = other.lineGap;
+        glyphScale = other.glyphScale;
         colored = other.colored;
         other.face = nullptr;
         return *this;
@@ -481,21 +484,45 @@ bool loadFontFace(const std::string& path, float fontSize, FontFace& face) {
         return false;
     }
 
+    const bool emojiFont = isEmojiFontPath(path);
     float pixelHeightScale = 1.0f;
     if (loadedFace->units_per_EM > 0 && loadedFace->ascender != loadedFace->descender) {
         const float designHeight = static_cast<float>(loadedFace->ascender - loadedFace->descender);
         pixelHeightScale = static_cast<float>(loadedFace->units_per_EM) / designHeight;
     }
     const float scaledFontSize = std::max(1.0f, fontSize * pixelHeightScale);
-    FT_Error sizeError = FT_Set_Char_Size(
-        loadedFace,
-        0,
-        static_cast<FT_F26Dot6>(std::lround(scaledFontSize * 64.0f)),
-        72,
-        72);
+
+    FT_Error sizeError = 1;
+    float glyphScale = 1.0f;
+    if ((emojiFont || FT_HAS_COLOR(loadedFace)) && loadedFace->num_fixed_sizes > 0) {
+        const float targetPpem = scaledFontSize * 64.0f;
+        int bestStrike = 0;
+        float bestDistance = std::numeric_limits<float>::max();
+        for (int i = 0; i < loadedFace->num_fixed_sizes; ++i) {
+            const float strikePpem = static_cast<float>(loadedFace->available_sizes[i].y_ppem);
+            const float distance = std::fabs(strikePpem - targetPpem);
+            if (distance < bestDistance) {
+                bestDistance = distance;
+                bestStrike = i;
+            }
+        }
+        sizeError = FT_Select_Size(loadedFace, bestStrike);
+        const float strikePpem = static_cast<float>(loadedFace->available_sizes[bestStrike].y_ppem) / 64.0f;
+        if (strikePpem > 0.0f) {
+            glyphScale = fontSize / strikePpem;
+        }
+    }
     if (sizeError != 0) {
-        const FT_UInt pixelSize = static_cast<FT_UInt>(std::max(1.0f, std::round(scaledFontSize)));
-        sizeError = FT_Set_Pixel_Sizes(loadedFace, 0, pixelSize);
+        sizeError = FT_Set_Char_Size(
+            loadedFace,
+            0,
+            static_cast<FT_F26Dot6>(std::lround(scaledFontSize * 64.0f)),
+            72,
+            72);
+        if (sizeError != 0) {
+            const FT_UInt pixelSize = static_cast<FT_UInt>(std::max(1.0f, std::round(scaledFontSize)));
+            sizeError = FT_Set_Pixel_Sizes(loadedFace, 0, pixelSize);
+        }
     }
     if (sizeError != 0) {
         FT_Done_Face(loadedFace);
@@ -505,11 +532,12 @@ bool loadFontFace(const std::string& path, float fontSize, FontFace& face) {
     face.path = path;
     face.face = loadedFace;
     face.size = fontSize;
-    face.colored = isEmojiFontPath(path);
+    face.glyphScale = glyphScale;
+    face.colored = emojiFont || FT_HAS_COLOR(loadedFace);
     if (loadedFace->size && loadedFace->size->metrics.y_ppem > 0) {
-        face.ascent = static_cast<float>(loadedFace->size->metrics.ascender) / 64.0f;
-        face.descent = static_cast<float>(loadedFace->size->metrics.descender) / 64.0f;
-        const float height = static_cast<float>(loadedFace->size->metrics.height) / 64.0f;
+        face.ascent = static_cast<float>(loadedFace->size->metrics.ascender) / 64.0f * glyphScale;
+        face.descent = static_cast<float>(loadedFace->size->metrics.descender) / 64.0f * glyphScale;
+        const float height = static_cast<float>(loadedFace->size->metrics.height) / 64.0f * glyphScale;
         face.lineGap = height - (face.ascent - face.descent);
     } else {
         face.ascent = fontSize * 0.8f;
@@ -560,6 +588,10 @@ std::shared_ptr<FontInfoHolder> loadSharedFontStack(const std::string& fontPath,
     holder->lazyFallbackPaths.push_back("C:/Windows/Fonts/seguisym.ttf");
     holder->lazyFallbackPaths.push_back("C:/Windows/Fonts/msyh.ttc");
     holder->lazyFallbackPaths.push_back("C:/Windows/Fonts/simhei.ttf");
+#elif defined(__APPLE__)
+    holder->lazyFallbackPaths.push_back("/System/Library/Fonts/Apple Color Emoji.ttc");
+    holder->lazyFallbackPaths.push_back("/System/Library/Fonts/Supplemental/Arial Unicode.ttf");
+    holder->lazyFallbackPaths.push_back("/System/Library/Fonts/Supplemental/Arial.ttf");
 #else
     holder->lazyFallbackPaths.push_back("/usr/share/fonts/truetype/noto/NotoColorEmoji.ttf");
     holder->lazyFallbackPaths.push_back("/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc");
@@ -773,7 +805,7 @@ float loadGlyphAdvance(const FontFace& face, unsigned int glyphIndex, unsigned i
         return fontSize * 0.5f;
     }
 
-    return static_cast<float>(face.face->glyph->advance.x) / 64.0f;
+    return static_cast<float>(face.face->glyph->advance.x) / 64.0f * face.glyphScale;
 }
 
 std::vector<TextPrimitive::ShapedGlyph> shapeWithFallback(FontInfoHolder& holder,
@@ -870,7 +902,8 @@ std::vector<TextPrimitive::ShapedGlyph> shapeWithHarfBuzz(FontInfoHolder& holder
         for (unsigned int i = 0; i < glyphCount; ++i) {
             const CodepointInfo clusterInfo = codepointInfoForCluster(run, infos[i].cluster);
             const unsigned int codepoint = clusterInfo.codepoint;
-            float advance = static_cast<float>(positions[i].x_advance) / 64.0f;
+            const float glyphScale = face.glyphScale;
+            float advance = static_cast<float>(positions[i].x_advance) / 64.0f * glyphScale;
             if (isCombiningMark(codepoint)) {
                 advance = 0.0f;
             }
@@ -880,8 +913,8 @@ std::vector<TextPrimitive::ShapedGlyph> shapeWithHarfBuzz(FontInfoHolder& holder
                               static_cast<int>(run.sourceOffset + clusterInfo.byteOffset),
                               static_cast<int>(run.sourceOffset + clusterInfo.byteOffset + clusterInfo.byteLength),
                               advance,
-                              static_cast<float>(positions[i].x_offset) / 64.0f,
-                              -static_cast<float>(positions[i].y_offset) / 64.0f});
+                              static_cast<float>(positions[i].x_offset) / 64.0f * glyphScale,
+                              -static_cast<float>(positions[i].y_offset) / 64.0f * glyphScale});
         }
 
         hb_buffer_destroy(buffer);
@@ -1358,10 +1391,13 @@ bool TextPrimitive::ensureGlyph(const ShapedGlyph& shaped) {
     const FT_Bitmap& bitmap = slot->bitmap;
     const bool colorBitmap = bitmap.pixel_mode == FT_PIXEL_MODE_BGRA;
     glyph.colored = colorBitmap;
-    glyph.xOffset = static_cast<float>(slot->bitmap_left);
-    glyph.yOffset = face.ascent - static_cast<float>(slot->bitmap_top);
-    glyph.width = static_cast<float>(bitmap.width);
-    glyph.height = static_cast<float>(bitmap.rows);
+    glyph.xOffset = static_cast<float>(slot->bitmap_left) * face.glyphScale;
+    glyph.yOffset = ascent_ - static_cast<float>(slot->bitmap_top) * face.glyphScale;
+    glyph.width = static_cast<float>(bitmap.width) * face.glyphScale;
+    glyph.height = static_cast<float>(bitmap.rows) * face.glyphScale;
+    if (colorBitmap && face.colored) {
+        glyph.yOffset = ascent_ - descent_ - glyph.height;
+    }
 
     if (bitmap.width == 0 || bitmap.rows == 0 || !bitmap.buffer) {
         cacheGlyph(shaped.key, glyph);

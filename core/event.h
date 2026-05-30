@@ -47,12 +47,15 @@ struct KeyboardEvent {
     bool selectAll = false;
     bool copy = false;
     bool cut = false;
+    bool undo = false;
+    bool redo = false;
     bool shift = false;
     bool escape = false;
 
     bool hasInput() const {
         return !text.empty() || !pasteText.empty() || backspace || del || enter ||
-               left || right || up || down || home || end || selectAll || copy || cut || escape;
+               left || right || up || down || home || end || selectAll || copy || cut ||
+               undo || redo || escape;
     }
 };
 
@@ -84,6 +87,8 @@ struct InputQueue {
     bool selectAll = false;
     bool copy = false;
     bool cut = false;
+    bool undo = false;
+    bool redo = false;
     bool shift = false;
     bool escape = false;
 };
@@ -173,6 +178,18 @@ inline void installInputCallbacks(GLFWwindow* window) {
             queue.cut = true;
             return;
         }
+        if (ctrl && key == GLFW_KEY_Z) {
+            if ((mods & GLFW_MOD_SHIFT) != 0) {
+                queue.redo = true;
+            } else {
+                queue.undo = true;
+            }
+            return;
+        }
+        if (ctrl && key == GLFW_KEY_Y) {
+            queue.redo = true;
+            return;
+        }
         if (ctrl && key == GLFW_KEY_A) {
             queue.selectAll = true;
             return;
@@ -233,6 +250,8 @@ inline std::pair<KeyboardEvent, ScrollEvent> consumeInputEvents(GLFWwindow* wind
     keyboard.selectAll = queue.selectAll;
     keyboard.copy = queue.copy;
     keyboard.cut = queue.cut;
+    keyboard.undo = queue.undo;
+    keyboard.redo = queue.redo;
     keyboard.shift = queue.shift;
     keyboard.escape = queue.escape;
 

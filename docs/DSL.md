@@ -222,7 +222,7 @@ Text 支持：
 
 `.icon(...)` 会自动使用图标字体；图标字体默认来自 `core/text.cpp`，也可以通过配置里的 `.iconFont(...)` 按 app 覆盖。
 
-底层文本使用 FreeType 渲染 glyph，启用 HarfBuzz 时会进行复杂文本 shaping。`fontFamily("monospace")` 是跨平台等宽字体别名，`fontFamily("Emoji")` 会选择平台 emoji 字体。需要精确光标位置或命中测试时，使用 `core::TextPrimitive::measureTextMetrics(...)` 获取 shaped caret stops。
+底层文本使用 FreeType 渲染 glyph，启用 HarfBuzz 时会进行复杂文本 shaping。`fontFamily("monospace")` 是跨平台等宽字体别名，`fontFamily("Emoji")` 会选择平台 emoji 字体。需要精确光标位置或命中测试时，使用 `core::TextPrimitive::measureTextMetrics(...)` 获取 shaped caret stops；返回的 `byteIndices` 是 UTF-8 byte offset，`caretX` 是对应的逻辑 x，和实际渲染使用同一套 fallback、emoji 缩放和 glyph advance。
 
 Text 的 transform 作用在生成后的 glyph 顶点上，适合做滚轮、轻量缩放和旋转动效；命中测试仍按未 transform 的布局 frame 计算。
 
@@ -390,7 +390,7 @@ components::button(ui, "save")
 
 - 已有基础 z-index 和矩形 clip；复杂圆角 clip、嵌套滚动区域的事件冒泡还没做。
 - `components::scroll` 现在负责滚动条和 offset，内容区可以用 `.clip()` + `y(-offset)` 组合实现裁剪滚动。
-- 已有基础键盘 focus / text input / 选择 / 剪贴板；IME 组合态和撤销栈还没做。
+- 已有基础键盘 focus / text input / 选择 / 剪贴板 / 撤销 / 重做；IME 组合态还没做。
 - 还没有事件冒泡。
 - 已有 click / press / release / hover changed / context menu / text input / scroll / drag 回调；更顺手的手势开发优先用 `components::mouseArea`。
 - transform 后的 hit-test 仍按布局矩形计算。
