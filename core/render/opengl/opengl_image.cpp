@@ -564,7 +564,87 @@ void updateTexturePixels(GLuint texture, const unsigned char* pixels, int width,
 
 } // namespace
 
-struct ImagePrimitive::SharedResources {
+struct ImagePrimitive::Impl {
+    struct SharedResources;
+    struct GifFrameData;
+
+    bool initialize();
+    void destroy();
+
+    void setSource(const std::string& source);
+    void setFlipVertically(bool value);
+    void setBounds(float x, float y, float width, float height);
+    void setTint(const Color& tint);
+    void setCornerRadius(float radius);
+    void setOpacity(float opacity);
+    void setTransform(const Transform& transform);
+    void setTransformMatrix(const TransformMatrix& matrix);
+    void setFit(ImageFit fit);
+    void setCoverViewport(bool enabled, const Vec2& canvasSize, const Vec2& viewportOffset);
+
+    bool updateTexture();
+    bool hasPendingLoad() const;
+    bool isAnimating() const;
+    void render(int windowWidth, int windowHeight);
+
+    static bool isSourceReady(const std::string& source);
+    static bool consumeRemoteImageReady();
+    static void releaseCachedTextures();
+
+    static SharedResources& sharedResources();
+    static bool retainSharedResources();
+    static void releaseSharedResources();
+    static unsigned int compileShader(unsigned int type, const char* source);
+    static unsigned int acquireTexture(const std::string& source, bool flipVertically, bool* pending, int* width, int* height, std::string* cacheKey);
+    static void releaseCachedTexture(const std::string& cacheKey);
+
+    bool updateGifTexture(const std::string& resolvedPath);
+    void releaseOwnedTexture();
+    void releaseCachedTextureReference();
+    Vec3 transformPoint(float x, float y) const;
+    void rebuildVertices(float* vertices) const;
+
+    std::string source_;
+    std::string loadedSource_;
+    bool flipVertically_ = false;
+    bool loadedFlipVertically_ = false;
+    bool pendingLoad_ = false;
+    Rect bounds_;
+    Color tint_ = {1.0f, 1.0f, 1.0f, 1.0f};
+    float radius_ = 0.0f;
+    float opacity_ = 1.0f;
+    Transform transform_;
+    TransformMatrix transformMatrix_;
+    bool hasTransformMatrix_ = false;
+    ImageFit fit_ = ImageFit::Cover;
+    bool hasCoverViewport_ = false;
+    Vec2 coverViewportSize_;
+    Vec2 coverViewportOffset_;
+    GLuint texture_ = 0;
+    bool ownsTexture_ = false;
+    std::string loadedTextureCacheKey_;
+    int textureWidth_ = 0;
+    int textureHeight_ = 0;
+
+    std::string loadedGifPath_;
+    bool loadedGifFlipVertically_ = false;
+    std::shared_ptr<const GifFrameData> gifFrames_;
+    std::vector<int> gifDelays_;
+    int gifFrameCount_ = 0;
+    int gifFrameIndex_ = 0;
+    double gifNextFrameTime_ = 0.0;
+
+    GLuint vao_ = 0;
+    GLuint vbo_ = 0;
+    GLuint shaderProgram_ = 0;
+    GLint windowSizeLocation_ = -1;
+    GLint textureLocation_ = -1;
+    GLint tintLocation_ = -1;
+    GLint rectLocation_ = -1;
+    GLint radiusLocation_ = -1;
+};
+
+struct ImagePrimitive::Impl::SharedResources {
     GLuint vao = 0;
     GLuint vbo = 0;
     GLuint shaderProgram = 0;
@@ -576,7 +656,7 @@ struct ImagePrimitive::SharedResources {
     int references = 0;
 };
 
-struct ImagePrimitive::GifFrameData {
+struct ImagePrimitive::Impl::GifFrameData {
     std::vector<unsigned char> pixels;
     std::vector<int> delays;
     int width = 0;
@@ -584,7 +664,7 @@ struct ImagePrimitive::GifFrameData {
     int frameCount = 0;
 };
 
-bool ImagePrimitive::initialize() {
+bool ImagePrimitive::Impl::initialize() {
     if (!retainSharedResources()) {
         return false;
     }
@@ -601,7 +681,7 @@ bool ImagePrimitive::initialize() {
     return true;
 }
 
-void ImagePrimitive::destroy() {
+void ImagePrimitive::Impl::destroy() {
     releaseOwnedTexture();
     if (shaderProgram_ != 0) {
         releaseSharedResources();
@@ -616,51 +696,51 @@ void ImagePrimitive::destroy() {
     radiusLocation_ = -1;
 }
 
-void ImagePrimitive::setSource(const std::string& source) {
+void ImagePrimitive::Impl::setSource(const std::string& source) {
     source_ = source;
 }
 
-void ImagePrimitive::setFlipVertically(bool value) {
+void ImagePrimitive::Impl::setFlipVertically(bool value) {
     flipVertically_ = value;
 }
 
-void ImagePrimitive::setBounds(float x, float y, float width, float height) {
+void ImagePrimitive::Impl::setBounds(float x, float y, float width, float height) {
     bounds_ = {x, y, width, height};
 }
 
-void ImagePrimitive::setTint(const Color& tint) {
+void ImagePrimitive::Impl::setTint(const Color& tint) {
     tint_ = tint;
 }
 
-void ImagePrimitive::setCornerRadius(float radius) {
+void ImagePrimitive::Impl::setCornerRadius(float radius) {
     radius_ = std::max(0.0f, radius);
 }
 
-void ImagePrimitive::setOpacity(float opacity) {
+void ImagePrimitive::Impl::setOpacity(float opacity) {
     opacity_ = std::clamp(opacity, 0.0f, 1.0f);
 }
 
-void ImagePrimitive::setTransform(const Transform& transform) {
+void ImagePrimitive::Impl::setTransform(const Transform& transform) {
     transform_ = transform;
     hasTransformMatrix_ = false;
 }
 
-void ImagePrimitive::setTransformMatrix(const TransformMatrix& matrix) {
+void ImagePrimitive::Impl::setTransformMatrix(const TransformMatrix& matrix) {
     transformMatrix_ = matrix;
     hasTransformMatrix_ = true;
 }
 
-void ImagePrimitive::setFit(ImageFit fit) {
+void ImagePrimitive::Impl::setFit(ImageFit fit) {
     fit_ = fit;
 }
 
-void ImagePrimitive::setCoverViewport(bool enabled, const Vec2& canvasSize, const Vec2& viewportOffset) {
+void ImagePrimitive::Impl::setCoverViewport(bool enabled, const Vec2& canvasSize, const Vec2& viewportOffset) {
     hasCoverViewport_ = enabled;
     coverViewportSize_ = canvasSize;
     coverViewportOffset_ = viewportOffset;
 }
 
-bool ImagePrimitive::updateTexture() {
+bool ImagePrimitive::Impl::updateTexture() {
     if (texture_ != 0 &&
         loadedGifPath_.empty() &&
         loadedSource_ == source_ &&
@@ -716,15 +796,15 @@ bool ImagePrimitive::updateTexture() {
     return changed;
 }
 
-bool ImagePrimitive::hasPendingLoad() const {
+bool ImagePrimitive::Impl::hasPendingLoad() const {
     return pendingLoad_;
 }
 
-bool ImagePrimitive::isAnimating() const {
+bool ImagePrimitive::Impl::isAnimating() const {
     return gifFrameCount_ > 1;
 }
 
-void ImagePrimitive::render(int windowWidth, int windowHeight) {
+void ImagePrimitive::Impl::render(int windowWidth, int windowHeight) {
     if (texture_ == 0 || shaderProgram_ == 0 || vao_ == 0 || vbo_ == 0 || bounds_.width <= 0.0f || bounds_.height <= 0.0f) {
         return;
     }
@@ -758,16 +838,16 @@ void ImagePrimitive::render(int windowWidth, int windowHeight) {
     }
 }
 
-bool ImagePrimitive::isSourceReady(const std::string& source) {
+bool ImagePrimitive::Impl::isSourceReady(const std::string& source) {
     bool pending = false;
     return !resolveImagePath(source, &pending).empty() && !pending;
 }
 
-bool ImagePrimitive::consumeRemoteImageReady() {
+bool ImagePrimitive::Impl::consumeRemoteImageReady() {
     return gRemoteImageReady.exchange(false);
 }
 
-void ImagePrimitive::releaseCachedTextures() {
+void ImagePrimitive::Impl::releaseCachedTextures() {
     for (auto& item : gTextureCache) {
         if (item.second.texture != 0) {
             glDeleteTextures(1, &item.second.texture);
@@ -776,12 +856,12 @@ void ImagePrimitive::releaseCachedTextures() {
     gTextureCache.clear();
 }
 
-ImagePrimitive::SharedResources& ImagePrimitive::sharedResources() {
+ImagePrimitive::Impl::SharedResources& ImagePrimitive::Impl::sharedResources() {
     static std::unordered_map<window::ContextKey, SharedResources> resourcesByContext;
     return resourcesByContext[window::currentContextKey()];
 }
 
-bool ImagePrimitive::retainSharedResources() {
+bool ImagePrimitive::Impl::retainSharedResources() {
     SharedResources& resources = sharedResources();
     ++resources.references;
     if (resources.shaderProgram != 0) {
@@ -879,7 +959,7 @@ bool ImagePrimitive::retainSharedResources() {
     return resources.shaderProgram != 0 && resources.vao != 0 && resources.vbo != 0;
 }
 
-void ImagePrimitive::releaseSharedResources() {
+void ImagePrimitive::Impl::releaseSharedResources() {
     SharedResources& resources = sharedResources();
     resources.references = std::max(0, resources.references - 1);
     if (resources.references > 0) {
@@ -905,7 +985,7 @@ void ImagePrimitive::releaseSharedResources() {
     resources.radiusLocation = -1;
 }
 
-unsigned int ImagePrimitive::compileShader(unsigned int type, const char* source) {
+unsigned int ImagePrimitive::Impl::compileShader(unsigned int type, const char* source) {
     GLuint shader = glCreateShader(type);
     glShaderSource(shader, 1, &source, nullptr);
     glCompileShader(shader);
@@ -919,7 +999,7 @@ unsigned int ImagePrimitive::compileShader(unsigned int type, const char* source
     return shader;
 }
 
-bool ImagePrimitive::updateGifTexture(const std::string& resolvedPath) {
+bool ImagePrimitive::Impl::updateGifTexture(const std::string& resolvedPath) {
     if (resolvedPath.empty()) {
         return false;
     }
@@ -1021,7 +1101,7 @@ bool ImagePrimitive::updateGifTexture(const std::string& resolvedPath) {
     return true;
 }
 
-void ImagePrimitive::releaseOwnedTexture() {
+void ImagePrimitive::Impl::releaseOwnedTexture() {
     releaseCachedTextureReference();
     if (ownsTexture_ && texture_ != 0) {
         glDeleteTextures(1, &texture_);
@@ -1030,7 +1110,7 @@ void ImagePrimitive::releaseOwnedTexture() {
     ownsTexture_ = false;
 }
 
-void ImagePrimitive::releaseCachedTextureReference() {
+void ImagePrimitive::Impl::releaseCachedTextureReference() {
     if (loadedTextureCacheKey_.empty()) {
         return;
     }
@@ -1041,7 +1121,7 @@ void ImagePrimitive::releaseCachedTextureReference() {
     }
 }
 
-unsigned int ImagePrimitive::acquireTexture(const std::string& source,
+unsigned int ImagePrimitive::Impl::acquireTexture(const std::string& source,
                                             bool flipVertically,
                                             bool* pending,
                                             int* outWidth,
@@ -1111,7 +1191,7 @@ unsigned int ImagePrimitive::acquireTexture(const std::string& source,
     return texture;
 }
 
-void ImagePrimitive::releaseCachedTexture(const std::string& cacheKey) {
+void ImagePrimitive::Impl::releaseCachedTexture(const std::string& cacheKey) {
     const auto cached = gTextureCache.find(cacheKey);
     if (cached == gTextureCache.end()) {
         return;
@@ -1128,7 +1208,7 @@ void ImagePrimitive::releaseCachedTexture(const std::string& cacheKey) {
     gTextureCache.erase(cached);
 }
 
-Vec3 ImagePrimitive::transformPoint(float x, float y) const {
+Vec3 ImagePrimitive::Impl::transformPoint(float x, float y) const {
     if (hasTransformMatrix_) {
         return core::transformPointWithW(transformMatrix_, x, y);
     }
@@ -1150,7 +1230,7 @@ Vec3 ImagePrimitive::transformPoint(float x, float y) const {
     };
 }
 
-void ImagePrimitive::rebuildVertices(float* vertices) const {
+void ImagePrimitive::Impl::rebuildVertices(float* vertices) const {
     Rect drawRect = bounds_;
     if (fit_ == ImageFit::Contain && textureWidth_ > 0 && textureHeight_ > 0 && bounds_.width > 0.0f && bounds_.height > 0.0f) {
         const float rectAspect = bounds_.width / bounds_.height;
@@ -1235,5 +1315,34 @@ void ImagePrimitive::rebuildVertices(float* vertices) const {
         vertices[offset + 6] = uv[index].y;
     }
 }
+
+ImagePrimitive::ImagePrimitive()
+    : impl_(std::make_unique<Impl>()) {}
+
+ImagePrimitive::~ImagePrimitive() = default;
+ImagePrimitive::ImagePrimitive(ImagePrimitive&&) noexcept = default;
+ImagePrimitive& ImagePrimitive::operator=(ImagePrimitive&&) noexcept = default;
+
+bool ImagePrimitive::initialize() { return impl_->initialize(); }
+void ImagePrimitive::destroy() { impl_->destroy(); }
+void ImagePrimitive::setSource(const std::string& source) { impl_->setSource(source); }
+void ImagePrimitive::setFlipVertically(bool value) { impl_->setFlipVertically(value); }
+void ImagePrimitive::setBounds(float x, float y, float width, float height) { impl_->setBounds(x, y, width, height); }
+void ImagePrimitive::setTint(const Color& tint) { impl_->setTint(tint); }
+void ImagePrimitive::setCornerRadius(float radius) { impl_->setCornerRadius(radius); }
+void ImagePrimitive::setOpacity(float opacity) { impl_->setOpacity(opacity); }
+void ImagePrimitive::setTransform(const Transform& transform) { impl_->setTransform(transform); }
+void ImagePrimitive::setTransformMatrix(const TransformMatrix& matrix) { impl_->setTransformMatrix(matrix); }
+void ImagePrimitive::setFit(ImageFit fit) { impl_->setFit(fit); }
+void ImagePrimitive::setCoverViewport(bool enabled, const Vec2& canvasSize, const Vec2& viewportOffset) {
+    impl_->setCoverViewport(enabled, canvasSize, viewportOffset);
+}
+bool ImagePrimitive::updateTexture() { return impl_->updateTexture(); }
+bool ImagePrimitive::hasPendingLoad() const { return impl_->hasPendingLoad(); }
+bool ImagePrimitive::isAnimating() const { return impl_->isAnimating(); }
+void ImagePrimitive::render(int windowWidth, int windowHeight) { impl_->render(windowWidth, windowHeight); }
+bool ImagePrimitive::isSourceReady(const std::string& source) { return Impl::isSourceReady(source); }
+bool ImagePrimitive::consumeRemoteImageReady() { return Impl::consumeRemoteImageReady(); }
+void ImagePrimitive::releaseCachedTextures() { Impl::releaseCachedTextures(); }
 
 } // namespace core

@@ -5,13 +5,18 @@
 
 #include <memory>
 #include <string>
-#include <vector>
 
 namespace core {
 
 class ImagePrimitive {
 public:
-    ImagePrimitive() = default;
+    ImagePrimitive();
+    ~ImagePrimitive();
+
+    ImagePrimitive(const ImagePrimitive&) = delete;
+    ImagePrimitive& operator=(const ImagePrimitive&) = delete;
+    ImagePrimitive(ImagePrimitive&&) noexcept;
+    ImagePrimitive& operator=(ImagePrimitive&&) noexcept;
 
     bool initialize();
     void destroy();
@@ -37,60 +42,8 @@ public:
     static void releaseCachedTextures();
 
 private:
-    struct SharedResources;
-    struct GifFrameData;
-
-    static SharedResources& sharedResources();
-    static bool retainSharedResources();
-    static void releaseSharedResources();
-    static unsigned int compileShader(unsigned int type, const char* source);
-    static unsigned int acquireTexture(const std::string& source, bool flipVertically, bool* pending, int* width, int* height, std::string* cacheKey);
-    static void releaseCachedTexture(const std::string& cacheKey);
-
-    bool updateGifTexture(const std::string& resolvedPath);
-    void releaseOwnedTexture();
-    void releaseCachedTextureReference();
-    Vec3 transformPoint(float x, float y) const;
-    void rebuildVertices(float* vertices) const;
-
-    std::string source_;
-    std::string loadedSource_;
-    bool flipVertically_ = false;
-    bool loadedFlipVertically_ = false;
-    bool pendingLoad_ = false;
-    Rect bounds_;
-    Color tint_ = {1.0f, 1.0f, 1.0f, 1.0f};
-    float radius_ = 0.0f;
-    float opacity_ = 1.0f;
-    Transform transform_;
-    TransformMatrix transformMatrix_;
-    bool hasTransformMatrix_ = false;
-    ImageFit fit_ = ImageFit::Cover;
-    bool hasCoverViewport_ = false;
-    Vec2 coverViewportSize_;
-    Vec2 coverViewportOffset_;
-    unsigned int texture_ = 0;
-    bool ownsTexture_ = false;
-    std::string loadedTextureCacheKey_;
-    int textureWidth_ = 0;
-    int textureHeight_ = 0;
-
-    std::string loadedGifPath_;
-    bool loadedGifFlipVertically_ = false;
-    std::shared_ptr<const GifFrameData> gifFrames_;
-    std::vector<int> gifDelays_;
-    int gifFrameCount_ = 0;
-    int gifFrameIndex_ = 0;
-    double gifNextFrameTime_ = 0.0;
-
-    unsigned int vao_ = 0;
-    unsigned int vbo_ = 0;
-    unsigned int shaderProgram_ = 0;
-    int windowSizeLocation_ = -1;
-    int textureLocation_ = -1;
-    int tintLocation_ = -1;
-    int rectLocation_ = -1;
-    int radiusLocation_ = -1;
+    struct Impl;
+    std::unique_ptr<Impl> impl_;
 };
 
 } // namespace core
