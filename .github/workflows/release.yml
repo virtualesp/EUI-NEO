@@ -75,7 +75,6 @@ jobs:
           $items = @()
           $items += Get-ChildItem $binDir -Filter *.exe -File -ErrorAction SilentlyContinue
           if ($items.Count -eq 0) { throw "No .exe outputs found in $binDir." }
-          $items += Get-ChildItem $binDir -Filter glfw*.dll -File -ErrorAction SilentlyContinue
           if (Test-Path "$binDir/assets") { $items += Get-Item "$binDir/assets" }
 
           Compress-Archive -Path $items.FullName -DestinationPath $out -Force
@@ -89,12 +88,6 @@ jobs:
           arch="$(printf '%s' "${RUNNER_ARCH:-X64}" | tr '[:upper:]' '[:lower:]')"
           out="dist/EUI-NEO-${label}-${{ matrix.platform }}-${arch}.tar.gz"
 
-          if [ "${{ matrix.platform }}" = "linux" ]; then
-            glfw_pattern='*/src/libglfw.so*'
-          else
-            glfw_pattern='*/src/libglfw*.dylib'
-          fi
-
           files=()
           while IFS= read -r bin; do
             files+=("$bin")
@@ -103,9 +96,6 @@ jobs:
             echo "No executable outputs found in build." >&2
             exit 1
           fi
-          while IFS= read -r lib; do
-            files+=("$lib")
-          done < <(find build/_deps -path "$glfw_pattern" 2>/dev/null || true)
           if [ -d build/assets ]; then
             files+=("build/assets")
           fi

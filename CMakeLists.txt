@@ -196,14 +196,6 @@ function(eui_neo_configure_app target_name)
         target_link_options(${target_name} PRIVATE -Wl,--gc-sections -s)
     endif()
 
-    if(WIN32 AND EUI_WINDOW_BACKEND STREQUAL "glfw")
-        add_custom_command(TARGET ${target_name} POST_BUILD
-            COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            $<TARGET_FILE:glfw>
-            $<TARGET_FILE_DIR:${target_name}>
-        )
-    endif()
-
     eui_neo_copy_assets(${target_name})
 endfunction()
 

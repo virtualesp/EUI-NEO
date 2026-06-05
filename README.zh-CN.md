@@ -18,7 +18,7 @@
 <p align="center">
   <a href="README.md">English</a>
   ·
-  <a href="site/index.html">官网</a>
+  <a href="https://sudoevolve.github.io/EUI-NEO/">官网</a>
 </p>
 
 EUI-NEO 是一个基于 C++17 的跨平台高性能轻量级 UI 框架，支持 GLFW/SDL2 窗口后端和 OpenGL/Vulkan 渲染后端。
@@ -42,6 +42,8 @@ EUI-NEO 是一个基于 C++17 的跨平台高性能轻量级 UI 框架，支持 
 - 平台 OpenGL/windowing 开发文件。Linux 构建还需要 X11 和 libcurl 开发包。
 
 GLFW、glad、tray、FreeType、HarfBuzz、libpng、zlib 等构建期第三方源码已内置在 `3rd/` 下。默认依赖模式是 `auto`：本地 `3rd/` 源码存在时直接使用，缺失时才从固定上游地址联网拉取。需要严格离线构建时，可配置 `-DEUI_DEPS_MODE=bundled`；需要强制联网拉取时，可配置 `-DEUI_DEPS_MODE=fetch`。HarfBuzz shaping 默认启用，可通过 `-DEUI_ENABLE_HARFBUZZ=OFF` 关闭。
+
+内置和 fetch 下载的依赖默认按静态链接构建，包括 GLFW。Release 包因此不需要额外携带 GLFW DLL / dylib / so。只有选择系统 SDL2 包时，SDL2 仍可能是动态库。
 
 默认窗口后端是 GLFW。SDL2 是可选后端，不放进 `3rd/`：构建 SDL2 后端时，要么使用系统 SDL2 包，要么显式选择 fetch 下载 SDL2：
 
@@ -200,7 +202,7 @@ core/         DSL、Runtime、图元、文本、图片、网络和平台能力
 docs/         项目实现文档
 examples/     独立 gallery 和示例应用源码
 include/      公共 include 路径：eui_neo.h 和 eui/* facade 头文件
-tests/        本地验证记录和测试数据
+tests/        probe 源码、fixture 应用和本地 benchmark 记录
 3rd/          内置第三方构建源码和单文件依赖
 ```
 

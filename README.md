@@ -18,7 +18,7 @@
 <p align="center">
   <a href="README.zh-CN.md">简体中文</a>
   ·
-  <a href="site/index.html">Website</a>
+  <a href="https://sudoevolve.github.io/EUI-NEO/">Website</a>
 </p>
 
 EUI-NEO is a cross-platform, high-performance, low-overhead C++17 UI framework with GLFW/SDL2 window backends and OpenGL/Vulkan render backends.
@@ -42,6 +42,8 @@ Requirements:
 - Platform OpenGL/windowing development files. Linux builds also need X11 and libcurl development packages.
 
 Build-time sources for GLFW, glad, tray, FreeType, HarfBuzz, libpng, and zlib are vendored under `3rd/`. The default dependency mode is `auto`: CMake uses the local `3rd/` sources when they are present, and fetches only missing dependencies from pinned upstream URLs. Use `-DEUI_DEPS_MODE=bundled` for strict offline builds, or `-DEUI_DEPS_MODE=fetch` to force online dependency fetches. HarfBuzz shaping is enabled by default and can be disabled with `-DEUI_ENABLE_HARFBUZZ=OFF`.
+
+Bundled and fetched dependencies are built for static linking by default, including GLFW. Release packages therefore do not need to ship a GLFW DLL / dylib / so. SDL2 may still be dynamic when you choose a system SDL2 package.
 
 GLFW is the default window backend. SDL2 is optional and is not vendored: build it with a system SDL2 package, or explicitly fetch SDL2 during configure:
 
@@ -200,7 +202,7 @@ core/         DSL, Runtime, primitives, text, image, network, and platform code
 docs/         Implementation notes and API documentation
 examples/     Standalone gallery and example application sources
 include/      Public include path: eui_neo.h and eui/* facade headers
-tests/        Local validation notes and benchmark records
+tests/        Probe sources, fixture apps, and local benchmark notes
 3rd/          Vendored third-party build sources and single-file dependencies
 ```
 
