@@ -5,9 +5,7 @@
 #include "core/dsl.h"
 
 #include <algorithm>
-#include <cmath>
 #include <string>
-#include <unordered_map>
 #include <utility>
 
 namespace components::workshop {
@@ -90,14 +88,9 @@ public:
     }
 
     void build() {
-        TiltCardState& state = states()[id_];
         const float w = std::max(1.0f, width_);
         const float h = std::max(1.0f, height_);
         const float radius = std::min(style_.radius, std::min(w, h) * 0.33f);
-        const float targetX = state.hover ? state.targetX : 0.0f;
-        const float targetY = state.hover ? state.targetY : 0.0f;
-        state.currentX = targetX;
-        state.currentY = targetY;
         const core::Transition noTransformTransition = core::Transition::none();
 
         ui_.stack(id_)
@@ -115,11 +108,9 @@ public:
 
                 ui_.stack(id_ + ".card")
                     .size(w, h)
-                    .rotateX(state.currentX)
-                    .rotateY(state.currentY)
-                    .scale(state.hover ? 1.012f : 1.0f)
                     .perspective(640.0f)
                     .transformOrigin(0.5f, 0.5f)
+                    .pointerTiltFrom(id_ + ".hit", maxTilt_, 1.012f)
                     .transition(noTransformTransition)
                     .content([&] {
                         ui_.rect(id_ + ".surface")
@@ -181,49 +172,12 @@ public:
                 components::mouseArea(ui_, id_ + ".hit")
                     .size(w, h)
                     .radius(radius)
-                    .onHoverChanged([id = id_](bool hover) {
-                        TiltCardState& hoverState = states()[id];
-                        hoverState.hover = hover;
-                        if (!hover) {
-                            hoverState.targetX = 0.0f;
-                            hoverState.targetY = 0.0f;
-                        }
-                    })
-                    .onMove([id = id_, maxTilt = maxTilt_](const components::MouseEvent& event) {
-                        TiltCardState& moveState = states()[id];
-                        const float nx = std::clamp(event.x / std::max(1.0f, event.bounds.width), 0.0f, 1.0f) - 0.5f;
-                        const float ny = std::clamp(event.y / std::max(1.0f, event.bounds.height), 0.0f, 1.0f) - 0.5f;
-                        const float nextY = nx * maxTilt;
-                        const float nextX = -ny * maxTilt;
-                        if (std::fabs(nextX - moveState.targetX) < 0.004f &&
-                            std::fabs(nextY - moveState.targetY) < 0.004f &&
-                            moveState.hover) {
-                            return false;
-                        }
-                        moveState.hover = true;
-                        moveState.targetY = nextY;
-                        moveState.targetX = nextX;
-                        return true;
-                    })
                     .build();
             })
             .build();
     }
 
 private:
-    struct TiltCardState {
-        bool hover = false;
-        float targetX = 0.0f;
-        float targetY = 0.0f;
-        float currentX = 0.0f;
-        float currentY = 0.0f;
-    };
-
-    static std::unordered_map<std::string, TiltCardState>& states() {
-        static std::unordered_map<std::string, TiltCardState> values;
-        return values;
-    }
-
     core::dsl::Ui& ui_;
     std::string id_;
     std::string title_ = "Tilt Card";

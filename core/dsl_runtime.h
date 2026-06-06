@@ -68,6 +68,7 @@ public:
         ui_.end();
         ui_.layout(screen);
         elementStructure_ = collectElementStructure();
+        syncScrollStateBindings();
 
         if (elementStructure_ != previousStructure) {
             needsRender_ = true;
@@ -111,6 +112,11 @@ public:
             needsRender_ = true;
         }
 
+        syncScrollStateBindings();
+        if (scrollEvent.active()) {
+            updateScroll(scrollEvent, hitTestScrollable(event, dpiScale));
+        }
+
         if (event.pressedThisFrame) {
             setFocusedId(hitTestFocusable(event, dpiScale));
         }
@@ -120,9 +126,6 @@ public:
         updateElementTree(event, deltaSeconds, dpiScale, hoverTargetId);
         updateDependentVisualDirtyRegions(dpiScale);
 
-        if (scrollEvent.active()) {
-            updateScroll(scrollEvent, hitTestScrollable(event, dpiScale));
-        }
         if (keyboardEvent.hasInput()) {
             updateTextInput(keyboardEvent);
         }
@@ -220,6 +223,7 @@ public:
         interactions_.clear();
         dirtyKeys_.clear();
         layouts_.clear();
+        scrollStates_.clear();
         timers_.clear();
         dependentVisualStates_.clear();
         frameTargets_.clear();
@@ -344,6 +348,17 @@ private:
     struct LayoutInstance {
         AnimatedValue<Transform> transform;
         AnimatedValue<float> opacity;
+        bool seen = false;
+    };
+
+    struct ScrollStateInstance {
+        float offset = 0.0f;
+        float maxOffset = 0.0f;
+        float step = 48.0f;
+        float dragStartOffset = 0.0f;
+        Rect dirtyRect;
+        bool hasDirtyRect = false;
+        bool initialized = false;
         bool seen = false;
     };
 
@@ -850,6 +865,60 @@ private:
         return transform;
     }
 
+    Transform pointerTiltTransform(const Element& element,
+                                   const PointerEvent& event,
+                                   float dpiScale,
+                                   const std::string& hoverTargetId) const {
+        Transform result = element.transform;
+        if (element.pointerTiltSourceId.empty() || element.pointerTiltMax <= 0.0f) {
+            return result;
+        }
+
+        const Element* source = ui_.find(element.pointerTiltSourceId);
+        const bool hover = source != nullptr && hoverTargetId == source->id && !source->disabled;
+        if (!hover || source == nullptr) {
+            return result;
+        }
+
+        const Rect bounds = toPixelRect(source->frame, dpiScale);
+        const float localX = static_cast<float>(event.x) - bounds.x;
+        const float localY = static_cast<float>(event.y) - bounds.y;
+        const float nx = std::clamp(localX / std::max(1.0f, bounds.width), 0.0f, 1.0f) - 0.5f;
+        const float ny = std::clamp(localY / std::max(1.0f, bounds.height), 0.0f, 1.0f) - 0.5f;
+        result.rotateY += nx * element.pointerTiltMax;
+        result.rotateX += -ny * element.pointerTiltMax;
+        result.scale = {
+            result.scale.x * element.pointerTiltHoverScale,
+            result.scale.y * element.pointerTiltHoverScale
+        };
+        return result;
+    }
+
+    Transform scrollTransformForElement(const Element& element, Transform transform = {}) const {
+        if (!element.scrollContentSourceId.empty()) {
+            const auto state = scrollStates_.find(element.scrollContentSourceId);
+            if (state != scrollStates_.end()) {
+                transform.translate.y -= state->second.offset;
+            }
+        }
+        if (!element.scrollThumbSourceId.empty()) {
+            const auto state = scrollStates_.find(element.scrollThumbSourceId);
+            if (state != scrollStates_.end() && state->second.maxOffset > 0.0f) {
+                const float normalized = std::clamp(state->second.offset / state->second.maxOffset, 0.0f, 1.0f);
+                transform.translate.y += element.scrollThumbTravel * normalized;
+            }
+        }
+        return transform;
+    }
+
+    Transform runtimeTransformForElement(const Element& element, const Transform& base) const {
+        return scrollTransformForElement(element, base);
+    }
+
+    static bool usesRuntimeTransform(const Element& element) {
+        return !element.scrollContentSourceId.empty() || !element.scrollThumbSourceId.empty();
+    }
+
     static TransformMatrix combinedPrimitiveMatrix(const RenderTransform& renderTransform,
                                                    const Rect& frame,
                                                    const Transform& localTransform) {
@@ -1026,7 +1095,7 @@ private:
         if (element.kind == ElementKind::Row ||
             element.kind == ElementKind::Column ||
             element.kind == ElementKind::Stack) {
-            updateLayoutElement(element, deltaSeconds, dpiScale, inheritedTransform);
+            updateLayoutElement(element, deltaSeconds, dpiScale, inheritedTransform, event, hoverTargetId);
         } else if (element.kind == ElementKind::Rect) {
             updateRect(element, deltaSeconds, dpiScale, inheritedTransform, ancestorFrameChanged);
         } else if (element.kind == ElementKind::Polygon) {
@@ -1087,6 +1156,12 @@ private:
         return instance;
     }
 
+    ScrollStateInstance& scrollStateInstance(const std::string& id) {
+        ScrollStateInstance& instance = scrollStates_.try_emplace(id).first->second;
+        instance.seen = true;
+        return instance;
+    }
+
     TimerInstance& timerInstance(const std::string& id) {
         return timers_.try_emplace(id).first->second;
     }
@@ -1118,6 +1193,7 @@ private:
         markEntriesUnseen(interactions_);
         markEntriesUnseen(dirtyKeys_);
         markEntriesUnseen(layouts_);
+        markEntriesUnseen(scrollStates_);
         markEntriesUnseen(frameTargets_);
     }
 
@@ -1137,6 +1213,7 @@ private:
         releaseUnseenEntries(interactions_, noop);
         releaseUnseenEntries(dirtyKeys_, noop);
         releaseUnseenEntries(layouts_, noop);
+        releaseUnseenEntries(scrollStates_, noop);
         releaseUnseenEntries(frameTargets_, noop);
     }
 
@@ -1185,7 +1262,7 @@ private:
 
     std::string hitTestScrollable(const PointerEvent& event, float dpiScale) const {
         return hitTest(event, dpiScale, [](const Element& element) {
-            return static_cast<bool>(element.onScroll) && !element.disabled;
+            return (!element.scrollStateId.empty() || static_cast<bool>(element.onScroll)) && !element.disabled;
         });
     }
 
@@ -1323,6 +1400,10 @@ private:
         }
 
         if (const Element* element = ui_.find(targetId)) {
+            if (!element->scrollStateId.empty() && !element->disabled) {
+                applyRuntimeScroll(*element, -static_cast<float>(event.y) * scrollStepFor(*element));
+                return;
+            }
             if (element->onScroll && !element->disabled) {
                 element->onScroll(event);
                 needsCompose_ = true;
@@ -1394,7 +1475,13 @@ private:
         const bool enabled = element.interactive && !element.disabled;
         const bool topmostHover = enabled && element.id == hoverTargetId;
         const bool wasHover = instance.state.hover;
-        instance.state.update(bounds, event, topmostHover, enabled);
+        Rect interactionBounds = bounds;
+        if (usesRuntimeTransform(element)) {
+            interactionBounds = transformRect({bounds.x, bounds.y, bounds.width, bounds.height},
+                                              {bounds.x, bounds.y, bounds.width, bounds.height},
+                                              scaleTransform(runtimeTransformForElement(element, element.transform), dpiScale));
+        }
+        instance.state.update(interactionBounds, event, topmostHover, enabled);
 
         if (enabled && wasHover != instance.state.hover && element.onHoverChanged) {
             element.onHoverChanged(instance.state.hover);
@@ -1442,6 +1529,11 @@ private:
             needsRender_ = true;
         }
 
+        if (enabled && instance.state.pressStarted && !element.scrollDragSourceId.empty()) {
+            beginRuntimeScrollDrag(element);
+            needsRender_ = true;
+        }
+
         if (enabled && instance.state.pressStarted && element.onPress) {
             element.onPress(event, bounds);
             needsCompose_ = true;
@@ -1457,6 +1549,12 @@ private:
             element.onRelease(event, bounds);
             needsCompose_ = true;
             needsRender_ = true;
+        }
+
+        if (enabled && instance.state.pressed && !element.scrollDragSourceId.empty() &&
+            (event.deltaX != 0.0 || event.deltaY != 0.0 || instance.state.drag)) {
+            updateRuntimeScrollDrag(element, instance.state.dragDeltaY, dpiScale);
+            return;
         }
 
         if (enabled && instance.state.pressed && element.onDrag &&
@@ -1612,7 +1710,9 @@ private:
     void updateLayoutElement(const Element& element,
                              float deltaSeconds,
                              float dpiScale,
-                             const RenderTransform& inheritedTransform) {
+                             const RenderTransform& inheritedTransform,
+                             const PointerEvent& event,
+                             const std::string& hoverTargetId) {
         LayoutInstance& instance = layoutInstance(element.id);
         const Rect beforeRect = applyRenderTransformToLogicalRect(inflateRect(
             transformRect({element.frame.x, element.frame.y, element.frame.width, element.frame.height},
@@ -1621,7 +1721,9 @@ private:
             64.0f), dpiScale, inheritedTransform);
 
         bool changed = false;
-        changed = instance.transform.setTarget(element.transform, element.transition, shouldAnimate(element, AnimProperty::Transform)) || changed;
+        Transform targetTransform = pointerTiltTransform(element, event, dpiScale, hoverTargetId);
+        targetTransform = runtimeTransformForElement(element, targetTransform);
+        changed = instance.transform.setTarget(targetTransform, element.transition, shouldAnimate(element, AnimProperty::Transform)) || changed;
         changed = instance.opacity.setTarget(element.opacity, element.transition, shouldAnimate(element, AnimProperty::Opacity)) || changed;
 
         changed = instance.transform.tick(deltaSeconds) || changed;
@@ -1678,7 +1780,7 @@ private:
         changed = instance.opacity.setTarget(element.opacity, element.transition, shouldAnimate(element, AnimProperty::Opacity)) || changed;
         changed = instance.border.setTarget(element.border, element.transition, shouldAnimate(element, AnimProperty::Border)) || changed;
         changed = instance.shadow.setTarget(element.shadow, element.transition, shouldAnimate(element, AnimProperty::Shadow)) || changed;
-        changed = instance.transform.setTarget(element.transform, element.transition, shouldAnimate(element, AnimProperty::Transform)) || changed;
+        changed = instance.transform.setTarget(runtimeTransformForElement(element, element.transform), element.transition, shouldAnimate(element, AnimProperty::Transform)) || changed;
 
         changed = instance.frame.tick(deltaSeconds) || changed;
         changed = instance.color.tick(deltaSeconds) || changed;
@@ -1737,7 +1839,7 @@ private:
         changed = instance.frame.setTarget(element.frame, element.transition, !snapFrame && shouldAnimateFrame(element)) || changed;
         changed = instance.color.setTarget(currentColor, element.transition, shouldAnimate(element, AnimProperty::Color)) || changed;
         changed = instance.opacity.setTarget(element.opacity, element.transition, shouldAnimate(element, AnimProperty::Opacity)) || changed;
-        changed = instance.transform.setTarget(element.transform, element.transition, shouldAnimate(element, AnimProperty::Transform)) || changed;
+        changed = instance.transform.setTarget(runtimeTransformForElement(element, element.transform), element.transition, shouldAnimate(element, AnimProperty::Transform)) || changed;
 
         changed = instance.frame.tick(deltaSeconds) || changed;
         changed = instance.color.tick(deltaSeconds) || changed;
@@ -1803,7 +1905,7 @@ private:
         changed = instance.frame.setTarget(element.frame, element.transition, !snapFrame && shouldAnimateFrame(element)) || changed;
         changed = instance.color.setTarget(element.textColor, element.transition, shouldAnimate(element, AnimProperty::TextColor)) || changed;
         changed = instance.opacity.setTarget(element.opacity, element.transition, shouldAnimate(element, AnimProperty::Opacity)) || changed;
-        changed = instance.transform.setTarget(element.transform, element.transition, shouldAnimate(element, AnimProperty::Transform)) || changed;
+        changed = instance.transform.setTarget(runtimeTransformForElement(element, element.transform), element.transition, shouldAnimate(element, AnimProperty::Transform)) || changed;
 
         changed = instance.frame.tick(deltaSeconds) || changed;
         changed = instance.color.tick(deltaSeconds) || changed;
@@ -1841,7 +1943,7 @@ private:
         changed = instance.tint.setTarget(element.color, element.transition, shouldAnimate(element, AnimProperty::Color)) || changed;
         changed = instance.radius.setTarget(element.radius, element.transition, shouldAnimate(element, AnimProperty::Radius)) || changed;
         changed = instance.opacity.setTarget(element.opacity, element.transition, shouldAnimate(element, AnimProperty::Opacity)) || changed;
-        changed = instance.transform.setTarget(element.transform, element.transition, shouldAnimate(element, AnimProperty::Transform)) || changed;
+        changed = instance.transform.setTarget(runtimeTransformForElement(element, element.transform), element.transition, shouldAnimate(element, AnimProperty::Transform)) || changed;
 
         changed = instance.frame.tick(deltaSeconds) || changed;
         changed = instance.tint.tick(deltaSeconds) || changed;
@@ -2043,6 +2145,109 @@ private:
             }
         }
         return result;
+    }
+
+    static bool ownsScrollState(const Element& element) {
+        return !element.scrollStateId.empty() && element.id == element.scrollStateId;
+    }
+
+    void syncScrollStateElement(const Element& element) {
+        if (element.scrollStateId.empty()) {
+            return;
+        }
+
+        ScrollStateInstance& instance = scrollStateInstance(element.scrollStateId);
+        if (!ownsScrollState(element)) {
+            return;
+        }
+
+        instance.maxOffset = std::max(0.0f, element.scrollMaxOffset);
+        instance.step = std::max(1.0f, element.scrollStep);
+        instance.dirtyRect = {element.frame.x, element.frame.y, element.frame.width, element.frame.height};
+        instance.hasDirtyRect = true;
+        if (!instance.initialized) {
+            instance.offset = std::clamp(element.scrollOffset, 0.0f, instance.maxOffset);
+            instance.initialized = true;
+        } else {
+            instance.offset = std::clamp(instance.offset, 0.0f, instance.maxOffset);
+        }
+    }
+
+    void syncScrollStateBindings() {
+        forEachElement([&](const Element& element) {
+            syncScrollStateElement(element);
+        });
+    }
+
+    float scrollStepFor(const Element& element) const {
+        const auto state = scrollStates_.find(element.scrollStateId);
+        if (state != scrollStates_.end()) {
+            return state->second.step;
+        }
+        return std::max(1.0f, element.scrollStep);
+    }
+
+    void addScrollDirtyRect(const ScrollStateInstance& instance) {
+        if (instance.hasDirtyRect) {
+            addDirtyRect(instance.dirtyRect);
+        }
+    }
+
+    void setScrollOffset(const std::string& stateId, float offset) {
+        auto state = scrollStates_.find(stateId);
+        if (state == scrollStates_.end()) {
+            return;
+        }
+
+        ScrollStateInstance& instance = state->second;
+        const float next = std::clamp(offset, 0.0f, instance.maxOffset);
+        if (closeEnough(next, instance.offset)) {
+            return;
+        }
+
+        instance.offset = next;
+        addScrollDirtyRect(instance);
+        if (const Element* owner = ui_.find(stateId)) {
+            if (owner->onScrollOffsetChanged && !owner->disabled) {
+                owner->onScrollOffsetChanged(instance.offset);
+            }
+        }
+    }
+
+    void applyRuntimeScroll(const Element& element, float delta) {
+        if (element.scrollStateId.empty()) {
+            return;
+        }
+        const auto state = scrollStates_.find(element.scrollStateId);
+        if (state == scrollStates_.end()) {
+            return;
+        }
+        setScrollOffset(element.scrollStateId, state->second.offset + delta);
+    }
+
+    void beginRuntimeScrollDrag(const Element& element) {
+        if (element.scrollDragSourceId.empty()) {
+            return;
+        }
+        auto state = scrollStates_.find(element.scrollDragSourceId);
+        if (state == scrollStates_.end()) {
+            return;
+        }
+        state->second.dragStartOffset = state->second.offset;
+    }
+
+    void updateRuntimeScrollDrag(const Element& element, double dragDeltaY, float dpiScale) {
+        if (element.scrollDragSourceId.empty() || element.scrollDragTravel <= 0.0f) {
+            return;
+        }
+        const auto state = scrollStates_.find(element.scrollDragSourceId);
+        if (state == scrollStates_.end() || state->second.maxOffset <= 0.0f) {
+            return;
+        }
+        const float logicalDeltaY = static_cast<float>(dragDeltaY) / std::max(0.001f, dpiScale);
+        const float next = state->second.dragStartOffset +
+                           logicalDeltaY * (state->second.maxOffset / element.scrollDragTravel);
+        setScrollOffset(element.scrollDragSourceId, next);
     }
 
     std::vector<Rect> resolveDirtyRects(int windowWidth, int windowHeight, float dpiScale) const {
@@ -2419,6 +2624,7 @@ private:
     std::unordered_map<std::string, InteractionInstance> interactions_;
     std::unordered_map<std::string, DirtyKeyInstance> dirtyKeys_;
     std::unordered_map<std::string, LayoutInstance> layouts_;
+    std::unordered_map<std::string, ScrollStateInstance> scrollStates_;
     std::unordered_map<std::string, TimerInstance> timers_;
     std::unordered_map<std::string, DependentVisualState> dependentVisualStates_;
     std::unordered_map<std::string, FrameTargetInstance> frameTargets_;

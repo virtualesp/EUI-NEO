@@ -3,12 +3,12 @@
 #include "eui/app.h"
 #include "core/platform/async.h"
 #include "core/platform/network.h"
+#include "core/platform/performance_stats.h"
 #include "core/platform/platform.h"
 
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
-#include <ctime>
 #include <limits>
 
 namespace app {
@@ -26,13 +26,14 @@ struct AppRunner {
     double lastRefreshRateUpdate = 0.0;
     double accumulatedRenderMs = 0.0;
     int measuredRenderFrames = 0;
-    std::clock_t lastCpuClock = std::clock();
+    bool renderedSinceLastClock = false;
+    core::platform::ProcessUsageSampler usageSampler;
 
     void resetTiming(double now) {
         lastTitleUpdate = now;
         nextFrameTime = now;
         lastFrameTime = now;
-        lastCpuClock = std::clock();
+        usageSampler.reset();
     }
 
     float consumeFrameDelta(double now) {
@@ -92,6 +93,7 @@ struct AppRunner {
     void markRendered() {
         needsRender = false;
         ++renderedFrames;
+        renderedSinceLastClock = true;
     }
 
     void recordRenderDuration(double milliseconds) {
@@ -112,40 +114,61 @@ struct AppRunner {
             return;
         }
 
-        const std::clock_t cpuClock = std::clock();
-        const double cpuSeconds = static_cast<double>(cpuClock - lastCpuClock) / static_cast<double>(CLOCKS_PER_SEC);
-        const double cpuPercent = std::max(0.0, cpuSeconds / elapsed * 100.0);
+        const core::platform::ProcessUsageSample usage = usageSampler.sample(elapsed);
         const double averageRenderMs = measuredRenderFrames > 0
             ? accumulatedRenderMs / static_cast<double>(measuredRenderFrames)
             : std::numeric_limits<double>::quiet_NaN();
 
-        char title[192];
-        if (std::isnan(averageRenderMs)) {
+        char cpuText[32];
+        if (usage.hasCpuPercent) {
+            std::snprintf(cpuText, sizeof(cpuText), "%.0f%%", usage.cpuPercent);
+        } else {
+            std::snprintf(cpuText, sizeof(cpuText), "n/a");
+        }
+
+        char title[224];
+        if (!usage.hasGpuPercent && std::isnan(averageRenderMs)) {
             std::snprintf(title,
                           sizeof(title),
-                          "%s - %.0f FPS | CPU %.0f%% | GPU n/a",
+                          "%s - %.0f FPS | CPU %s | GPU n/a",
                           windowTitle(),
                           renderedFrames / elapsed,
-                          cpuPercent);
+                          cpuText);
+        } else if (!usage.hasGpuPercent) {
+            std::snprintf(title,
+                          sizeof(title),
+                          "%s - %.0f FPS | CPU %s | GPU n/a | Render %.2f ms",
+                          windowTitle(),
+                          renderedFrames / elapsed,
+                          cpuText,
+                          averageRenderMs);
+        } else if (std::isnan(averageRenderMs)) {
+            std::snprintf(title,
+                          sizeof(title),
+                          "%s - %.0f FPS | CPU %s | GPU %.0f%%",
+                          windowTitle(),
+                          renderedFrames / elapsed,
+                          cpuText,
+                          usage.gpuPercent);
         } else {
             std::snprintf(title,
                           sizeof(title),
-                          "%s - %.0f FPS | CPU %.0f%% | GPU %.2f ms",
+                          "%s - %.0f FPS | CPU %s | GPU %.0f%% | Render %.2f ms",
                           windowTitle(),
                           renderedFrames / elapsed,
-                          cpuPercent,
+                          cpuText,
+                          usage.gpuPercent,
                           averageRenderMs);
         }
         setTitle(title);
         renderedFrames = 0;
         accumulatedRenderMs = 0.0;
         measuredRenderFrames = 0;
-        lastCpuClock = cpuClock;
         lastTitleUpdate = now;
     }
 
     void advanceFrameClock(double now, bool animating) {
-        if (animating) {
+        if (animating || renderedSinceLastClock) {
             nextFrameTime += frameInterval;
             if (nextFrameTime <= now || nextFrameTime > now + frameInterval * 2.0) {
                 nextFrameTime = now + frameInterval;
@@ -153,6 +176,7 @@ struct AppRunner {
         } else {
             nextFrameTime = now;
         }
+        renderedSinceLastClock = false;
     }
 };
 

@@ -148,15 +148,28 @@ struct Element {
     std::function<void(bool)> onFocusChanged;
     std::function<void(const KeyboardEvent&)> onTextInput;
     std::function<void(const ScrollEvent&)> onScroll;
+    std::function<void(float)> onScrollOffsetChanged;
     std::function<void(const DragEvent&)> onDrag;
     std::function<void()> onTimer;
     std::function<void(float)> onFrame;
     float timerSeconds = 0.0f;
     std::string visualStateSourceId;
     std::string hoverOpacitySourceId;
+    std::string pointerTiltSourceId;
+    std::string scrollStateId;
+    std::string scrollContentSourceId;
+    std::string scrollDragSourceId;
+    std::string scrollThumbSourceId;
     float pressedScale = 1.0f;
     float hoverHiddenOpacity = 0.0f;
     float hoverVisibleOpacity = 1.0f;
+    float pointerTiltMax = 0.0f;
+    float pointerTiltHoverScale = 1.0f;
+    float scrollOffset = 0.0f;
+    float scrollMaxOffset = 0.0f;
+    float scrollStep = 48.0f;
+    float scrollDragTravel = 0.0f;
+    float scrollThumbTravel = 0.0f;
     Transition transition;
     bool explicitFrameAnimation = false;
     std::string dirtyKey;
@@ -609,6 +622,12 @@ public:
         return self();
     }
 
+    Derived& onScrollOffsetChanged(std::function<void(float)> callback) {
+        element_->interactive = true;
+        element_->onScrollOffsetChanged = std::move(callback);
+        return self();
+    }
+
     Derived& onDrag(std::function<void(const DragEvent&)> callback) {
         element_->interactive = true;
         element_->onDrag = std::move(callback);
@@ -628,6 +647,11 @@ public:
 
     Derived& visualStateFrom(const std::string& id, float pressedScaleValue = 0.965f);
     Derived& hoverOpacityFrom(const std::string& id, float hiddenOpacity = 0.0f, float visibleOpacity = 1.0f);
+    Derived& pointerTiltFrom(const std::string& id, float maxTiltRadians, float hoverScale = 1.0f);
+    Derived& scrollState(const std::string& id, float offset, float maxOffset, float step = 48.0f);
+    Derived& scrollContentFrom(const std::string& id);
+    Derived& scrollDragFrom(const std::string& id, float travel);
+    Derived& scrollThumbFrom(const std::string& id, float travel);
 
     Derived& transition(const Transition& value) {
         element_->transition = value;
@@ -1349,6 +1373,45 @@ Derived& BuilderBase<Derived>::hoverOpacityFrom(const std::string& id, float hid
     element_->hoverOpacitySourceId = ui_->resolveId(id);
     element_->hoverHiddenOpacity = std::clamp(hiddenOpacity, 0.0f, 1.0f);
     element_->hoverVisibleOpacity = std::clamp(visibleOpacity, 0.0f, 1.0f);
+    return self();
+}
+
+template <typename Derived>
+Derived& BuilderBase<Derived>::pointerTiltFrom(const std::string& id, float maxTiltRadians, float hoverScale) {
+    element_->pointerTiltSourceId = ui_->resolveId(id);
+    element_->pointerTiltMax = std::clamp(maxTiltRadians, 0.0f, 0.80f);
+    element_->pointerTiltHoverScale = std::clamp(hoverScale, 0.50f, 2.0f);
+    return self();
+}
+
+template <typename Derived>
+Derived& BuilderBase<Derived>::scrollState(const std::string& id, float offset, float maxOffset, float step) {
+    element_->scrollStateId = ui_->resolveId(id);
+    element_->scrollOffset = std::max(0.0f, offset);
+    element_->scrollMaxOffset = std::max(0.0f, maxOffset);
+    element_->scrollStep = std::max(1.0f, step);
+    element_->interactive = true;
+    return self();
+}
+
+template <typename Derived>
+Derived& BuilderBase<Derived>::scrollContentFrom(const std::string& id) {
+    element_->scrollContentSourceId = ui_->resolveId(id);
+    return self();
+}
+
+template <typename Derived>
+Derived& BuilderBase<Derived>::scrollDragFrom(const std::string& id, float travel) {
+    element_->scrollDragSourceId = ui_->resolveId(id);
+    element_->scrollDragTravel = std::max(0.0f, travel);
+    element_->interactive = true;
+    return self();
+}
+
+template <typename Derived>
+Derived& BuilderBase<Derived>::scrollThumbFrom(const std::string& id, float travel) {
+    element_->scrollThumbSourceId = ui_->resolveId(id);
+    element_->scrollThumbTravel = std::max(0.0f, travel);
     return self();
 }
 
