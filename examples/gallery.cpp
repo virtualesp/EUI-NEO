@@ -436,6 +436,9 @@ void composeContent(eui::Ui& ui, float width, float height) {
                 .onClose([] {
                     workshopOpen = false;
                 })
+                .content([&](eui::Ui& panelUi, float panelWidth, float) {
+                    components::workshop::neumorphicButton(panelUi, "workshop.neumorphic.button").theme(themeColors()).size(std::min(310.0f, panelWidth), 92.0f).fontSize(32.0f).text("Click me").transition(pageTransition()).build();
+                })
                 .build();
         });
 }

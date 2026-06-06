@@ -658,7 +658,7 @@ private:
 
     static Rect visualRect(const LayoutRect& frame, const Shadow& shadow, float blur, const Transform& transform = {}) {
         Rect rect{frame.x, frame.y, frame.width, frame.height};
-        if (shadow.enabled) {
+        if (shadow.enabled && !shadow.inset) {
             Rect shadowRect{
                 frame.x + shadow.offset.x - shadow.spread,
                 frame.y + shadow.offset.y - shadow.spread,

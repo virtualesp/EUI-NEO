@@ -156,7 +156,8 @@ inline bool closeEnough(const Shadow& left, const Shadow& right, float epsilon =
            closeEnough(left.offset, right.offset, epsilon) &&
            closeEnough(left.blur, right.blur, epsilon) &&
            closeEnough(left.spread, right.spread, epsilon) &&
-           closeEnough(left.color, right.color, epsilon);
+           closeEnough(left.color, right.color, epsilon) &&
+           left.inset == right.inset;
 }
 
 inline bool closeEnough(const Transform& left, const Transform& right, float epsilon = 0.001f) {
@@ -226,7 +227,8 @@ inline Shadow lerpValue(Shadow from, Shadow to, float amount) {
         lerpValue(from.offset, to.offset, amount),
         lerpValue(from.blur, to.blur, amount),
         lerpValue(from.spread, to.spread, amount),
-        lerpValue(from.color, to.color, amount)
+        lerpValue(from.color, to.color, amount),
+        amount < 0.5f ? from.inset : to.inset
     };
 }
 

@@ -155,6 +155,7 @@ ui.rect("card")
     .radius(18.0f)
     .border(1.0f, {0.23f, 0.29f, 0.38f, 1.0f})
     .shadow(26.0f, 0.0f, 8.0f, {0.0f, 0.0f, 0.0f, 0.26f})
+    .insetShadow(12.0f, 4.0f, 4.0f, {0.0f, 0.0f, 0.0f, 0.22f})
     .transition(0.2f, eui::Ease::OutCubic)
     .build();
 ```
@@ -169,6 +170,7 @@ Rect 支持：
 .rounding(...)
 .border(...)
 .shadow(...)
+.insetShadow(...)
 .blur(...)
 .opacity(...)
 .translate(...)
@@ -188,6 +190,8 @@ Rect 支持：
 ```
 
 `.states(normal, hover, pressed)` 是 Rect 专用的 hover / pressed 视觉状态，会开启交互并由 Runtime 维护 blend。
+
+`.shadow(...)` 绘制圆角外阴影，会扩大元素的 visual dirty rect。`.insetShadow(...)` 绘制裁剪在圆角内部的内阴影，不扩大 visual rect，适合拟态按压、内凹面板、输入框内侧暗边等效果。两者都是单阴影字段；需要多重阴影时，叠多个透明 `rect` 图层，每层使用稳定 id。
 
 ## Text DSL
 

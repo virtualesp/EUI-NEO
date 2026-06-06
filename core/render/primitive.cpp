@@ -36,8 +36,11 @@ struct RoundedRectPrimitive::Impl {
                    const Rect& geometryBounds,
                    const Rect& sdfBounds,
                    bool shadowPass,
+                   bool insetShadowPass,
                    const Color& layerColor,
-                   float layerBlur) const {
+                   float layerBlur,
+                   const Vec2& layerShadowOffset = {},
+                   float layerShadowSpread = 0.0f) const {
         auto* backend = activeBackend();
         if (backend == nullptr) {
             return;
@@ -56,8 +59,11 @@ struct RoundedRectPrimitive::Impl {
         command.border.width = core::render::clampedPrimitiveBorderWidth(command.border.width, sdfBounds);
         command.opacity = opacity;
         command.shadowBlur = layerBlur;
+        command.shadowOffset = layerShadowOffset;
+        command.shadowSpread = layerShadowSpread;
         command.backdropBlur = shadowPass ? 0.0f : blur;
         command.shadowPass = shadowPass;
+        command.insetShadowPass = insetShadowPass;
         backend->drawRoundedRect(command, windowWidth, windowHeight);
     }
 
@@ -71,7 +77,20 @@ struct RoundedRectPrimitive::Impl {
         const float shadowBlur = core::render::primitiveShadowBlur(shadow);
         const float shadowExtent = core::render::primitiveShadowExtent(shadow, shadowBlur);
         drawLayer(windowWidth, windowHeight, core::render::expandPrimitiveRect(shadowShape, shadowExtent), shadowShape,
-                  true, core::render::scalePrimitiveAlpha(shadow.color, 0.74f), shadowBlur);
+                  true, false, core::render::scalePrimitiveAlpha(shadow.color, 0.74f), shadowBlur);
+    }
+
+    void drawInsetShadow(int windowWidth, int windowHeight) const {
+        if (bounds.width <= 0.0f || bounds.height <= 0.0f ||
+            opacity <= 0.001f || shadow.color.a <= 0.001f) {
+            return;
+        }
+
+        drawLayer(windowWidth, windowHeight, bounds, bounds, true, true,
+                  core::render::scalePrimitiveAlpha(shadow.color, 0.86f),
+                  core::render::primitiveShadowBlur(shadow),
+                  shadow.offset,
+                  shadow.spread);
     }
 };
 
@@ -139,10 +158,13 @@ void RoundedRectPrimitive::render(int windowWidth, int windowHeight) const {
     if (impl_->blur > 0.0f) {
         backend->prepareBackdropBlur(impl_->bounds, impl_->blur, windowWidth, windowHeight);
     }
-    if (impl_->shadow.enabled) {
+    if (impl_->shadow.enabled && !impl_->shadow.inset) {
         impl_->drawShadow(windowWidth, windowHeight);
     }
-    impl_->drawLayer(windowWidth, windowHeight, impl_->bounds, impl_->bounds, false, impl_->color, impl_->shadow.blur);
+    impl_->drawLayer(windowWidth, windowHeight, impl_->bounds, impl_->bounds, false, false, impl_->color, impl_->shadow.blur);
+    if (impl_->shadow.enabled && impl_->shadow.inset) {
+        impl_->drawInsetShadow(windowWidth, windowHeight);
+    }
 }
 
 struct PolygonPrimitive::Impl {
@@ -201,6 +223,7 @@ void PolygonPrimitive::render(int windowWidth, int windowHeight) const {
     command.opacity = impl_->opacity;
     command.shadowBlur = 1.0f;
     command.shadowPass = false;
+    command.insetShadowPass = false;
     backend->drawRoundedRect(command, windowWidth, windowHeight);
 }
 

@@ -74,11 +74,34 @@ void main() {
     bool shadowPass = pc.flags2.x > 0.5;
     float blurAmount = pc.flags2.y;
     bool backdropReady = pc.flags2.z > 0.5;
+    bool insetShadowPass = pc.flags2.w > 0.5;
 
     vec2 center = pc.rect.xy + pc.rect.zw * 0.5;
     float distanceToEdge = roundedBoxDistance(vLocalPos - center, pc.rect.zw * 0.5, radius);
     float blur = max(shadowBlur, 1.0);
     if (shadowPass) {
+        if (insetShadowPass) {
+            float edgeWidth = max(fwidth(distanceToEdge), 0.75);
+            float shapeAlpha = 1.0 - smoothstep(-edgeWidth, edgeWidth, distanceToEdge);
+            if (shapeAlpha <= 0.0) {
+                discard;
+            }
+
+            vec2 shadowOffset = pc.borderColor.xy;
+            float shadowSpread = pc.borderColor.z;
+            vec2 sideVector = dot(shadowOffset, shadowOffset) <= 0.0001 ? vec2(0.0, 1.0) : normalize(-shadowOffset);
+            vec2 localUnit = (vLocalPos - center) / max(pc.rect.zw * 0.5, vec2(1.0));
+            float sideMask = clamp(0.34 + dot(localUnit, sideVector) * 0.66, 0.0, 1.0);
+            float spreadBias = max(shadowSpread, 0.0);
+            float edgeFalloff = smoothstep(-blur - spreadBias, 0.0, distanceToEdge);
+            float innerAlpha = edgeFalloff * sideMask;
+            if (innerAlpha <= 0.0) {
+                discard;
+            }
+            outColor = vec4(pc.fillColor.rgb, pc.fillColor.a * innerAlpha * shapeAlpha * opacity);
+            return;
+        }
+
         float shadowAlpha = 1.0 - smoothstep(-blur, blur, distanceToEdge);
         if (shadowAlpha <= 0.0) {
             discard;

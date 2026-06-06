@@ -697,12 +697,22 @@ public:
     }
 
     Derived& shadow(float blur, float offsetY, const Color& colorValue) {
-        this->element_->shadow = {true, {0.0f, offsetY}, std::max(0.0f, blur), 0.0f, colorValue};
+        this->element_->shadow = {true, {0.0f, offsetY}, std::max(0.0f, blur), 0.0f, colorValue, false};
         return this->self();
     }
 
     Derived& shadow(float blur, float offsetX, float offsetY, const Color& colorValue) {
-        this->element_->shadow = {true, {offsetX, offsetY}, std::max(0.0f, blur), 0.0f, colorValue};
+        this->element_->shadow = {true, {offsetX, offsetY}, std::max(0.0f, blur), 0.0f, colorValue, false};
+        return this->self();
+    }
+
+    Derived& insetShadow(float blur, float offsetY, const Color& colorValue) {
+        this->element_->shadow = {true, {0.0f, offsetY}, std::max(0.0f, blur), 0.0f, colorValue, true};
+        return this->self();
+    }
+
+    Derived& insetShadow(float blur, float offsetX, float offsetY, const Color& colorValue) {
+        this->element_->shadow = {true, {offsetX, offsetY}, std::max(0.0f, blur), 0.0f, colorValue, true};
         return this->self();
     }
 

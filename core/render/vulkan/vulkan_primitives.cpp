@@ -132,7 +132,14 @@ void VulkanRenderBackend::drawRoundedRect(const RoundedRectDrawCommand& command,
     writeColor(constants.fillColor, command.fillColor);
     writeColor(constants.gradientStart, command.gradient.start);
     writeColor(constants.gradientEnd, command.gradient.end);
-    writeColor(constants.borderColor, command.border.color);
+    if (command.shadowPass) {
+        constants.borderColor[0] = command.shadowOffset.x;
+        constants.borderColor[1] = command.shadowOffset.y;
+        constants.borderColor[2] = command.shadowSpread;
+        constants.borderColor[3] = command.insetShadowPass ? 1.0f : 0.0f;
+    } else {
+        writeColor(constants.borderColor, command.border.color);
+    }
     constants.rect[0] = command.rect.x;
     constants.rect[1] = command.rect.y;
     constants.rect[2] = command.rect.width;
@@ -144,6 +151,7 @@ void VulkanRenderBackend::drawRoundedRect(const RoundedRectDrawCommand& command,
     constants.flags2[0] = command.shadowPass ? 1.0f : 0.0f;
     constants.flags2[1] = command.shadowPass ? 0.0f : command.backdropBlur;
     constants.flags2[2] = (!command.shadowPass && command.backdropBlur > 0.0f && backdropReady_) ? 1.0f : 0.0f;
+    constants.flags2[3] = command.insetShadowPass ? 1.0f : 0.0f;
 
     const VkDeviceSize bufferOffset = static_cast<VkDeviceSize>(vertexOffset * sizeof(PrimitiveGeometryVertex));
     vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, roundedRectPipeline_);
