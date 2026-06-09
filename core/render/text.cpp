@@ -925,6 +925,9 @@ struct TextPrimitive::Impl {
     struct Line {
         std::vector<LaidOutGlyph> glyphs;
         float width = 0.0f;
+        float inkTop = 0.0f;
+        float inkBottom = 0.0f;
+        bool hasInk = false;
     };
 
     Impl() = default;
@@ -1483,7 +1486,22 @@ void TextPrimitive::Impl::rebuildVertices() {
     const float lineHeight = style_.lineHeight > 0.0f ? style_.lineHeight : style_.fontSize * 1.2f;
     float blockYOffset = 0.0f;
     if (style_.verticalAlign == VerticalAlign::Center) {
-        blockYOffset = -measuredSize_.y * 0.5f;
+        float inkTop = std::numeric_limits<float>::max();
+        float inkBottom = std::numeric_limits<float>::lowest();
+        for (size_t lineIndex = 0; lineIndex < lines_.size(); ++lineIndex) {
+            const Line& line = lines_[lineIndex];
+            if (!line.hasInk) {
+                continue;
+            }
+            const float lineY = static_cast<float>(lineIndex) * lineHeight;
+            inkTop = std::min(inkTop, lineY + line.inkTop);
+            inkBottom = std::max(inkBottom, lineY + line.inkBottom);
+        }
+        if (inkTop <= inkBottom) {
+            blockYOffset = -(inkTop + inkBottom) * 0.5f;
+        } else {
+            blockYOffset = -measuredSize_.y * 0.5f;
+        }
     } else if (style_.verticalAlign == VerticalAlign::Bottom) {
         blockYOffset = -measuredSize_.y;
     }
@@ -1587,6 +1605,16 @@ void TextPrimitive::Impl::appendShapedGlyphToLine(Line& line, const ShapedGlyph&
     const Glyph* glyph = findGlyph(shaped.key);
     if (glyph && shaped.key != 0 && shaped.codepoint != ' ' && shaped.codepoint != '\t') {
         line.glyphs.push_back({*glyph, cursorX + shaped.xOffset, shaped.yOffset});
+        const float top = shaped.yOffset + glyph->yOffset;
+        const float bottom = top + glyph->height;
+        if (!line.hasInk) {
+            line.inkTop = top;
+            line.inkBottom = bottom;
+            line.hasInk = true;
+        } else {
+            line.inkTop = std::min(line.inkTop, top);
+            line.inkBottom = std::max(line.inkBottom, bottom);
+        }
     }
     cursorX += shaped.advance;
     line.width = cursorX;

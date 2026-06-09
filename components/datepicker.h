@@ -10,7 +10,6 @@
 #include <cstdio>
 #include <functional>
 #include <string>
-#include <unordered_map>
 #include <utility>
 
 namespace components {
@@ -77,7 +76,7 @@ public:
         const float panelScale = open_ ? 1.0f : 0.965f;
         const float panelOffsetY = open_ ? 0.0f : 14.0f;
         const std::function<void(bool)> onOpenChange = onOpenChange_;
-        DateDraft* draft = &draftFor(id_);
+        DateDraft* draft = &ui_.state<DateDraft>(id_ + ".draft");
         syncDraft(*draft, open_, year_, month_, day_);
 
         ui_.stack(id_)
@@ -137,16 +136,6 @@ private:
         float scaleX = 1.0f;
         float scaleY = 1.0f;
     };
-
-    static DragState& dragStateFor(const std::string& id) {
-        static std::unordered_map<std::string, DragState> states;
-        return states[id];
-    }
-
-    static DateDraft& draftFor(const std::string& id) {
-        static std::unordered_map<std::string, DateDraft> drafts;
-        return drafts[id];
-    }
 
     static bool leapYear(int year) {
         return (year % 4 == 0 && year % 100 != 0) || year % 400 == 0;
@@ -348,7 +337,7 @@ private:
 
     void wheelColumn(int column, float x, float y, float width, float height, float rowHeight, DateDraft* draft) {
         const std::string columnId = id_ + ".column." + std::to_string(column);
-        DragState* state = &dragStateFor(columnId);
+        DragState* state = &ui_.state<DragState>(columnId + ".drag");
         const int year = draft != nullptr ? draft->year : year_;
         const int month = draft != nullptr ? draft->month : month_;
         const int day = draft != nullptr ? draft->day : day_;

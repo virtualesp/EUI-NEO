@@ -22,6 +22,13 @@ inline void Runtime::compose(const std::string& pageId, float logicalWidth, floa
     ui_.layout(screen);
     elementStructure_ = collectElementStructure();
     syncScrollStateBindings();
+    for (const std::string& scope : ui_.consumeReleasedStateScopes()) {
+        const std::string childPrefix = scope + ".";
+        if (focusedId_ == scope || focusedId_.rfind(childPrefix, 0) == 0) {
+            focusedId_.clear();
+            ui_.setFocusedId(focusedId_);
+        }
+    }
 
     if (elementStructure_ != previousStructure) {
         needsRender_ = true;
@@ -182,6 +189,7 @@ inline void Runtime::shutdown(bool releaseCachedImageTextures) {
     dependentVisualStates_.clear();
     frameTargets_.clear();
     elementStructure_.clear();
+    ui_.clearState();
 }
 
 inline void Runtime::releaseGraphicsResources(bool releaseCachedImageTextures) {

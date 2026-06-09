@@ -707,10 +707,10 @@ float displayFont(float width, const std::string& text) {
 
 void key(eui::Ui& ui, const std::string& id, const std::string& label,
          float x, float y, float size, bool accent = false, bool active = false) {
-    const eui::Color top = accent ? eui::Color{0.78f, 0.86f, 0.82f, 1.0f} :
-                           active ? eui::Color{0.23f, 0.30f, 0.29f, 1.0f} : kButtonTop;
-    const eui::Color bottom = accent ? eui::Color{0.58f, 0.72f, 0.66f, 1.0f} :
-                              active ? eui::Color{0.10f, 0.17f, 0.16f, 1.0f} : kButtonBottom;
+    const eui::Color top = accent ? eui::Color{0.86f, 0.95f, 0.90f, 1.0f} :
+                           active ? eui::Color{0.34f, 0.42f, 0.40f, 1.0f} : eui::Color{0.40f, 0.415f, 0.420f, 1.0f};
+    const eui::Color bottom = accent ? eui::Color{0.52f, 0.66f, 0.60f, 1.0f} :
+                              active ? eui::Color{0.07f, 0.12f, 0.11f, 1.0f} : eui::Color{0.055f, 0.058f, 0.064f, 1.0f};
     const unsigned int icon = keyIcon(label);
     const std::string shownLabel = keyLabel(label);
     const bool compactLabel = shownLabel == "AC" || shownLabel == "00" || shownLabel == "sin" ||
@@ -728,7 +728,25 @@ void key(eui::Ui& ui, const std::string& id, const std::string& label,
                 .size(size, size)
                 .gradient(top, bottom)
                 .radius(size * 0.5f)
-                .border(1.0f, accent ? eui::Color{0.74f, 0.88f, 0.80f, 0.55f} : eui::Color{0.36f, 0.38f, 0.39f, 0.46f})
+                .border(1.0f, accent ? eui::Color{0.82f, 0.96f, 0.88f, 0.48f} : eui::Color{0.78f, 0.82f, 0.84f, 0.18f})
+                .shadow(size * 0.26f, 0.0f, size * 0.10f,
+                        accent ? eui::Color{0.45f, 0.86f, 0.66f, 0.20f} : eui::Color{0.0f, 0.0f, 0.0f, 0.42f})
+                .build();
+
+            ui.rect(id + ".lower.depth")
+                .position(0.0f, size * 0.48f)
+                .size(size, size * 0.52f)
+                .gradient(eui::Color{0.0f, 0.0f, 0.0f, 0.0f},
+                          accent ? eui::Color{0.04f, 0.12f, 0.08f, 0.12f} : eui::Color{0.0f, 0.0f, 0.0f, 0.24f})
+                .radius(size * 0.26f)
+                .build();
+
+            ui.rect(id + ".rim")
+                .position(size * 0.08f, size * 0.075f)
+                .size(size * 0.84f, size * 0.84f)
+                .color(kClear)
+                .radius(size * 0.42f)
+                .border(1.0f, accent ? eui::Color{1.0f, 1.0f, 1.0f, 0.26f} : eui::Color{1.0f, 1.0f, 1.0f, 0.14f})
                 .build();
 
             auto text = ui.text(id + ".text")
@@ -767,10 +785,20 @@ void roundToolButton(eui::Ui& ui, const std::string& id, const std::string& labe
         .content([&] {
             ui.rect(id + ".face")
                 .size(size, size)
-                .gradient(active ? eui::Color{0.24f, 0.32f, 0.30f, 1.0f} : eui::Color{0.17f, 0.18f, 0.19f, 1.0f},
-                          active ? eui::Color{0.10f, 0.16f, 0.15f, 1.0f} : eui::Color{0.07f, 0.075f, 0.08f, 1.0f})
+                .gradient(active ? eui::Color{0.34f, 0.42f, 0.40f, 1.0f} : eui::Color{0.36f, 0.375f, 0.385f, 1.0f},
+                          active ? eui::Color{0.07f, 0.12f, 0.10f, 1.0f} : eui::Color{0.05f, 0.052f, 0.058f, 1.0f})
                 .radius(size * 0.5f)
-                .border(1.0f, active ? eui::Color{0.58f, 0.78f, 0.70f, 0.48f} : eui::Color{0.36f, 0.38f, 0.39f, 0.40f})
+                .border(1.0f, active ? eui::Color{0.78f, 0.96f, 0.88f, 0.36f} : eui::Color{0.78f, 0.82f, 0.84f, 0.14f})
+                .shadow(size * 0.22f, 0.0f, size * 0.08f,
+                        active ? eui::Color{0.30f, 0.74f, 0.58f, 0.16f} : eui::Color{0.0f, 0.0f, 0.0f, 0.34f})
+                .build();
+
+            ui.rect(id + ".rim")
+                .position(size * 0.10f, size * 0.09f)
+                .size(size * 0.80f, size * 0.80f)
+                .color(kClear)
+                .radius(size * 0.40f)
+                .border(1.0f, active ? eui::Color{0.96f, 1.0f, 0.98f, 0.20f} : eui::Color{1.0f, 1.0f, 1.0f, 0.10f})
                 .build();
 
             auto text = ui.text(id + ".text")

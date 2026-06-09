@@ -9,7 +9,6 @@
 #include <cmath>
 #include <functional>
 #include <string>
-#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -73,7 +72,7 @@ public:
         const int count = static_cast<int>(items_.size());
         const float safeWidth = std::max(1.0f, width_);
         const float safeHeight = std::max(1.0f, height_);
-        CarouselState& state = stateFor(id_);
+        CarouselState& state = ui_.state<CarouselState>(id_);
         const float inputIndex = clampIndex(index_, count);
         if (!state.initialized) {
             state.displayIndex = inputIndex;
@@ -223,11 +222,6 @@ private:
         bool hasEmittedIndex = false;
         bool initialized = false;
     };
-
-    static CarouselState& stateFor(const std::string& id) {
-        static std::unordered_map<std::string, CarouselState> states;
-        return states[id];
-    }
 
     static void advanceDisplayIndex(CarouselState& state, float deltaSeconds) {
         const float delta = state.targetIndex - state.displayIndex;

@@ -8,7 +8,6 @@
 #include <cstdio>
 #include <functional>
 #include <string>
-#include <unordered_map>
 #include <utility>
 
 namespace components {
@@ -75,7 +74,7 @@ public:
         const float panelScale = open_ ? 1.0f : 0.965f;
         const float panelOffsetY = open_ ? 0.0f : 14.0f;
         const std::function<void(bool)> onOpenChange = onOpenChange_;
-        TimeDraft* draft = &draftFor(id_);
+        TimeDraft* draft = &ui_.state<TimeDraft>(id_ + ".draft");
         syncDraft(*draft, open_, hour_, minute_);
 
         ui_.stack(id_)
@@ -134,16 +133,6 @@ private:
         float scaleX = 1.0f;
         float scaleY = 1.0f;
     };
-
-    static DragState& dragStateFor(const std::string& id) {
-        static std::unordered_map<std::string, DragState> states;
-        return states[id];
-    }
-
-    static TimeDraft& draftFor(const std::string& id) {
-        static std::unordered_map<std::string, TimeDraft> drafts;
-        return drafts[id];
-    }
 
     static void syncDraft(TimeDraft& draft, bool open, int hour, int minute) {
         if (!open || !draft.active) {
@@ -342,7 +331,7 @@ private:
 
     void wheelColumn(int column, float x, float y, float width, float height, float rowHeight, TimeDraft* draft) {
         const std::string columnId = id_ + ".column." + std::to_string(column);
-        DragState* state = &dragStateFor(columnId);
+        DragState* state = &ui_.state<DragState>(columnId + ".drag");
         const int hour = draft != nullptr ? draft->hour : hour_;
         const int minute = draft != nullptr ? draft->minute : minute_;
         const int step = minuteStep_;

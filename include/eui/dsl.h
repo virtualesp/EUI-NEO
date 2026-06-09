@@ -6,6 +6,7 @@ namespace core::dsl {
 class Ui;
 struct Screen;
 enum class HitTestMode;
+enum class LoaderMode;
 } // namespace core::dsl
 
 namespace eui {
@@ -38,5 +39,7 @@ namespace dsl {
 using HitTestMode = core::dsl::HitTestMode;
 
 } // namespace dsl
+
+using LoaderMode = core::dsl::LoaderMode;
 
 } // namespace eui

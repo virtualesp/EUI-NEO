@@ -134,6 +134,10 @@ private:
         const LayoutRect content = measureContent(innerAvailableWidth, innerAvailableHeight);
         measuredWidth_ = resolveSize(width_, content.width + padding_.left + padding_.right, availableWidth, minWidth_, maxWidth_, forceWidth);
         measuredHeight_ = resolveSize(height_, content.height + padding_.top + padding_.bottom, availableHeight, minHeight_, maxHeight_, forceHeight);
+
+        if (type_ == LayoutType::Stack) {
+            remeasureStackFillChildren();
+        }
     }
 
 public:
@@ -390,6 +394,29 @@ private:
             totalHeight += lineHeight;
         }
         return {0.0f, 0.0f, maxLineWidth, totalHeight};
+    }
+
+    void remeasureStackFillChildren() {
+        if (children_.empty()) {
+            return;
+        }
+
+        const float availableWidth = innerSpan(measuredWidth_, padding_.left, padding_.right);
+        const float availableHeight = innerSpan(measuredHeight_, padding_.top, padding_.bottom);
+        for (const auto& child : children_) {
+            const bool fillWidth = child->width_.mode == SizeMode::Fill;
+            const bool fillHeight = child->height_.mode == SizeMode::Fill;
+            if (!fillWidth && !fillHeight) {
+                continue;
+            }
+
+            const float childAvailableWidth = std::max(0.0f, availableWidth - child->margin_.left - child->margin_.right);
+            const float childAvailableHeight = std::max(0.0f, availableHeight - child->margin_.top - child->margin_.bottom);
+            child->measure(childAvailableWidth,
+                           childAvailableHeight,
+                           fillWidth,
+                           fillHeight);
+        }
     }
 
     float mainOffset(float containerSize, float contentSize) const {

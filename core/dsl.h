@@ -10,6 +10,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
+#include <cstdint>
 #include <functional>
 #include <type_traits>
 #include <memory>
@@ -60,6 +61,11 @@ enum class HitTestMode {
     Layout,
     Transformed,
     None
+};
+
+enum class LoaderMode {
+    DestroyOnHide,
+    KeepAlive
 };
 
 struct Screen {
@@ -205,6 +211,63 @@ struct Element {
 };
 
 class Ui;
+class LoaderBuilder;
+
+class StateStore {
+public:
+    template <typename T>
+    T& get(const std::string& key) {
+        const std::string typedKey = key + "#" + stateTypeKey<T>();
+        auto it = entries_.find(typedKey);
+        if (it == entries_.end()) {
+            auto entry = std::make_unique<StateEntry<T>>();
+            T* value = &entry->value;
+            entries_.emplace(typedKey, std::move(entry));
+            return *value;
+        }
+        return static_cast<StateEntry<T>*>(it->second.get())->value;
+    }
+
+    void releasePrefix(const std::string& prefix) {
+        if (prefix.empty()) {
+            return;
+        }
+        const std::string childPrefix = prefix + ".";
+        const std::string statePrefix = prefix + "#";
+        for (auto it = entries_.begin(); it != entries_.end(); ) {
+            const std::string& key = it->first;
+            if (key == prefix ||
+                key.rfind(childPrefix, 0) == 0 ||
+                key.rfind(statePrefix, 0) == 0) {
+                it = entries_.erase(it);
+            } else {
+                ++it;
+            }
+        }
+    }
+
+    void clear() {
+        entries_.clear();
+    }
+
+private:
+    struct StateEntryBase {
+        virtual ~StateEntryBase() = default;
+    };
+
+    template <typename T>
+    struct StateEntry : StateEntryBase {
+        T value;
+    };
+
+    template <typename T>
+    static std::string stateTypeKey() {
+        static int token = 0;
+        return std::to_string(reinterpret_cast<std::uintptr_t>(&token));
+    }
+
+    std::unordered_map<std::string, std::unique_ptr<StateEntryBase>> entries_;
+};
 
 template <typename Derived>
 class BuilderBase {
@@ -944,6 +1007,42 @@ public:
     LayoutBuilder(Ui& ui, Element* element) : BuilderBase<LayoutBuilder>(ui, element) {}
 };
 
+class LoaderBuilder {
+public:
+    LoaderBuilder(Ui& ui, std::string id);
+
+    LoaderBuilder& active(bool value = true) {
+        active_ = value;
+        return *this;
+    }
+
+    LoaderBuilder& mode(LoaderMode value) {
+        mode_ = value;
+        return *this;
+    }
+
+    LoaderBuilder& destroyOnHide() {
+        mode_ = LoaderMode::DestroyOnHide;
+        return *this;
+    }
+
+    LoaderBuilder& keepAlive() {
+        mode_ = LoaderMode::KeepAlive;
+        return *this;
+    }
+
+    template <typename Fn>
+    LoaderBuilder& content(Fn&& compose);
+
+    void build() {}
+
+private:
+    Ui* ui_ = nullptr;
+    std::string id_;
+    bool active_ = true;
+    LoaderMode mode_ = LoaderMode::DestroyOnHide;
+};
+
 class RectBuilder : public ShapeBuilderBase<RectBuilder> {
 public:
     RectBuilder(Ui& ui, Element* element) : ShapeBuilderBase<RectBuilder>(ui, element) {}
@@ -1216,6 +1315,7 @@ public:
         pageId_ = pageId;
         roots_.clear();
         stack_.clear();
+        scopeStack_.clear();
         index_.clear();
         generatedId_ = 0;
     }
@@ -1238,6 +1338,10 @@ public:
 
     LayoutBuilder stack(const std::string& id = "") {
         return LayoutBuilder(*this, addElement(ElementKind::Stack, id));
+    }
+
+    LoaderBuilder loader(const std::string& id) {
+        return LoaderBuilder(*this, id);
     }
 
     RectBuilder rect(const std::string& id) {
@@ -1298,8 +1402,25 @@ public:
         return !focusedId_.empty() && focusedId_ == resolveId(id);
     }
 
+    template <typename T>
+    T& state(const std::string& id) {
+        return stateStore_.get<T>(resolveId(id));
+    }
+
+    void releaseStateScope(const std::string& id) {
+        const std::string scope = resolveId(id);
+        stateStore_.releasePrefix(scope);
+        releasedStateScopes_.push_back(scope);
+    }
+
+    void clearState() {
+        stateStore_.clear();
+        releasedStateScopes_.clear();
+    }
+
 private:
     friend class Runtime;
+    friend class LoaderBuilder;
     friend class BuilderBase<LayoutBuilder>;
     friend class BuilderBase<RectBuilder>;
     friend class BuilderBase<PolygonBuilder>;
@@ -1308,6 +1429,12 @@ private:
 
     void setFocusedId(const std::string& id) {
         focusedId_ = id;
+    }
+
+    std::vector<std::string> consumeReleasedStateScopes() {
+        std::vector<std::string> scopes = std::move(releasedStateScopes_);
+        releasedStateScopes_.clear();
+        return scopes;
     }
 
     Element* addElement(ElementKind kind, const std::string& id) {
@@ -1336,15 +1463,58 @@ private:
         }
     }
 
+    void pushScope(const std::string& id) {
+        const std::string scope = normalizeScopeId(id);
+        if (!scope.empty()) {
+            scopeStack_.push_back(scope);
+        }
+    }
+
+    void popScope() {
+        if (!scopeStack_.empty()) {
+            scopeStack_.pop_back();
+        }
+    }
+
     std::string resolveId(const std::string& id) const {
-        if (id.empty() || pageId_.empty()) {
+        if (id.empty()) {
             return id;
         }
-        const std::string prefix = pageId_ + ".";
+
+        std::string scopePrefix = pageId_;
+        for (const std::string& scope : scopeStack_) {
+            if (!scopePrefix.empty()) {
+                scopePrefix += ".";
+            }
+            scopePrefix += scope;
+        }
+        if (scopePrefix.empty()) {
+            return id;
+        }
+
+        const std::string prefix = scopePrefix + ".";
         if (id.rfind(prefix, 0) == 0) {
             return id;
         }
-        return pageId_ + "." + id;
+        return scopePrefix + "." + id;
+    }
+
+    std::string normalizeScopeId(const std::string& id) const {
+        if (id.empty()) {
+            return {};
+        }
+        const std::string pagePrefix = pageId_.empty() ? std::string{} : pageId_ + ".";
+        std::string scope = id;
+        if (!pagePrefix.empty() && scope.rfind(pagePrefix, 0) == 0) {
+            scope = scope.substr(pagePrefix.size());
+        }
+        for (const std::string& parent : scopeStack_) {
+            const std::string parentPrefix = parent + ".";
+            if (scope.rfind(parentPrefix, 0) == 0) {
+                scope = scope.substr(parentPrefix.size());
+            }
+        }
+        return scope;
     }
 
     std::string makeGeneratedId(ElementKind kind) {
@@ -1394,12 +1564,36 @@ private:
     }
 
     std::string pageId_;
+    std::vector<std::string> scopeStack_;
     std::vector<std::unique_ptr<Element>> roots_;
     std::vector<Element*> stack_;
     std::unordered_map<std::string, Element*> index_;
     std::string focusedId_;
+    StateStore stateStore_;
+    std::vector<std::string> releasedStateScopes_;
     std::size_t generatedId_ = 0;
 };
+
+inline LoaderBuilder::LoaderBuilder(Ui& ui, std::string id)
+    : ui_(&ui), id_(std::move(id)) {}
+
+template <typename Fn>
+LoaderBuilder& LoaderBuilder::content(Fn&& compose) {
+    if (ui_ == nullptr) {
+        return *this;
+    }
+    if (!active_) {
+        if (mode_ == LoaderMode::DestroyOnHide) {
+            ui_->releaseStateScope(id_);
+        }
+        return *this;
+    }
+
+    ui_->pushScope(id_);
+    std::forward<Fn>(compose)();
+    ui_->popScope();
+    return *this;
+}
 
 template <typename Derived>
 template <typename Fn>

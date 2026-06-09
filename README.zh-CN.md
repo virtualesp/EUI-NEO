@@ -37,39 +37,39 @@ EUI-NEO 是一个基于 C++17 的跨平台高性能轻量级 UI 框架，支持 
 
 - CMake 3.14+
 - 支持 C++17 的编译器
-- OpenGL 开发文件。
-- Vulkan SDK 可选。默认渲染后端选择是 `auto`：检测到 SDK 时使用 Vulkan，否则回退 OpenGL。使用 `opengl-glfw-release` 或 `opengl-sdl2-release` 可强制 OpenGL。
+- 默认渲染器需要 OpenGL 开发文件。
+- Vulkan SDK 可选。只有需要 Vulkan 渲染器时才使用 `build-vk` 构建目录。
 - 平台 OpenGL/windowing 开发文件。Linux 构建还需要 X11 和 libcurl 开发包。
 
 GLFW、glad、tray、FreeType、HarfBuzz、libpng、zlib 等构建期第三方源码已内置在 `3rd/` 下。默认依赖模式是 `auto`：本地 `3rd/` 源码存在时直接使用，缺失时才从固定上游地址联网拉取。需要严格离线构建时，可配置 `-DEUI_DEPS_MODE=bundled`；需要强制联网拉取时，可配置 `-DEUI_DEPS_MODE=fetch`。HarfBuzz shaping 默认启用，可通过 `-DEUI_ENABLE_HARFBUZZ=OFF` 关闭。
 
 内置和 fetch 下载的依赖默认按静态链接构建，包括 GLFW。Release 包因此不需要额外携带 GLFW DLL / dylib / so。只有选择系统 SDL2 包时，SDL2 仍可能是动态库。
 
-默认窗口后端是 GLFW。SDL2 是可选后端，不放进 `3rd/`：构建 SDL2 后端时，要么使用系统 SDL2 包，要么显式选择 fetch 下载 SDL2：
+默认窗口后端是 GLFW。SDL2 是可选后端，不放进 `3rd/`：如果 GLFW 不可用，或需要测试 SDL2，在构建目录名里加 `sdl2`：
 
 ```sh
-cmake --preset sdl2-release
-cmake --build --preset sdl2-release
-cmake --preset sdl2-fetch-release
-cmake --build --preset sdl2-fetch-release
+cmake -S . -B build-sdl2
+cmake --build build-sdl2
 ```
+
+找不到系统 SDL2 包时，加 `-DEUI_DEPS_MODE=fetch` 下载固定版本 SDL2 源码。
 
 macOS / Linux 示例：
 
 ```sh
-cmake --preset glfw-release
-cmake --build --preset glfw-release
-./build/glfw-release/gallery
+cmake -S . -B build
+cmake --build build
+./build/gallery
 ```
 
 显式选择渲染后端示例：
 
 ```sh
-cmake --preset opengl-glfw-release
-cmake --build --preset opengl-glfw-release --target gallery
-cmake --preset vulkan-glfw-release
-cmake --build --preset vulkan-glfw-release --target gallery
+cmake -S . -B build-vk
+cmake --build build-vk --target gallery
 ```
+
+构建目录后缀会在首次配置时自动识别：`build` 表示 GLFW + OpenGL，`build-sdl2` 表示 SDL2 + OpenGL，`build-vk` 表示 GLFW + Vulkan，`build-sdl2-vk` 表示 SDL2 + Vulkan。已有构建目录存在 CMake cache 时，删除该目录或显式传入 `-DEUI_WINDOW_BACKEND=...` / `-DEUI_RENDER_BACKEND=...`。
 
 Windows / PowerShell 示例：
 
@@ -93,9 +93,9 @@ sudo apt-get install -y libsdl2-dev
 
 ## 接入到你的项目
 
-推荐按下面三种方式选择。普通应用先走公共 facade 头文件，只有已有窗口循环时再直接接静态库。
+推荐方式是把 EUI-NEO 作为 CMake 子目录加入，使用框架提供的 app main，并通过公共 facade 头文件编写 UI。
 
-最小 CMake 项目可以这样引入：
+最小 CMake：
 
 ```cmake
 cmake_minimum_required(VERSION 3.14)
@@ -113,7 +113,7 @@ add_executable(my_app
 eui_neo_configure_app(my_app)
 ```
 
-`app.cpp` 只需要包含公共入口并实现配置和 compose：
+最小 `app.cpp`：
 
 ```cpp
 #include "eui_neo.h"
@@ -144,7 +144,7 @@ void compose(eui::Ui& ui, const eui::Screen& screen) {
 } // namespace app
 ```
 
-构建自己的项目：
+构建：
 
 ```sh
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
@@ -152,46 +152,7 @@ cmake --build build --parallel
 ./build/my_app
 ```
 
-### 1. 公共头文件方式
-
-这是最简单的完整 app 接入方式。你的应用源码只需要包含公共入口：
-
-```cpp
-#include "eui_neo.h"
-```
-
-把 EUI-NEO 作为子目录加入，并使用框架提供的 app main：
-
-```cmake
-add_subdirectory(external/EUI-NEO)
-
-add_executable(my_app external/EUI-NEO/core/app/glfw_app_main.cpp app.cpp)
-eui_neo_configure_app(my_app)
-```
-
-然后在 `app.cpp` 里实现 `app::dslAppConfig()` 和 `app::compose()`。EUI-NEO 会接管窗口、事件循环、当前选择的渲染后端和资源复制。这里是“单个公共 facade 头文件入口”，不是纯 header-only 库。
-
-默认窗口后端是 GLFW。需要 SDL2 时，配置 `-DEUI_WINDOW_BACKEND=sdl2`，并把 app main 换成 `external/EUI-NEO/core/app/sdl2_app_main.cpp`。
-
-### 2. 静态库方式
-
-如果你的项目已经有自己的 main、窗口、渲染 context 或事件循环，可以直接链接导出的静态库 target：
-
-```cmake
-add_subdirectory(external/EUI-NEO)
-
-add_executable(my_app main.cpp app.cpp)
-target_link_libraries(my_app PRIVATE eui::neo)
-eui_neo_copy_assets(my_app)
-```
-
-普通 UI 代码仍然优先 `#include "eui_neo.h"`；只有接入边界需要碰底层 runtime / platform 头文件。
-
-### 3. 直接在 `examples/` 开发
-
-快速实验或新增内置示例时，直接创建 `examples/my_app.cpp`，包含 `eui_neo.h`，实现 `app::dslAppConfig()` 和 `app::compose()`。顶层构建会自动为每个 `examples/*.cpp` 生成一个可执行程序。较大的 demo 推荐使用 `gallery` 这种组织方式：`examples/gallery.cpp` 保留 app 壳、路由和共享主题，具体页面放到 `examples/pages/*.h`，每个页面对象自己持有状态并声明画面，接近 QML 页面组件的写法。
-
-EUI-NEO 作为子目录接入时，默认不会构建仓库自带示例。需要构建 `gallery`、`eui_demo`、`serial_tool` 等示例时，配置 `-DEUI_BUILD_APPS=ON`。完整 CMake 片段、`FetchContent` 和嵌入已有 GLFW 主循环的写法见 [集成指南](docs/集成指南.md)。
+这种方式下，EUI-NEO 会接管窗口、事件循环、当前选择的渲染后端和资源复制。SDL2、Vulkan、`FetchContent`、自定义 main loop，以及在父项目里构建仓库自带示例的写法，见 [集成指南](docs/集成指南.md)。
 
 ## 目录结构
 
@@ -214,14 +175,12 @@ tests/        probe 源码、fixture 应用和本地 benchmark 记录
 - [事件](docs/事件.md)
 - [动画](docs/动画.md)
 - [异步](docs/异步.md)
-- [渲染流程](docs/渲染流程.md)
-- [渲染后端架构](docs/渲染后端架构.md)
+- [渲染后端架构与流程](docs/渲染后端架构.md)
 - [图片](docs/图片.md)
 - [网络](docs/网络.md)
 - [平台能力](docs/平台能力.md)
 - [集成指南](docs/集成指南.md)
 - [开发与发布](docs/开发与发布.md)
-- [Review 清单](docs/Review清单.md)
 
 ## 许可
 

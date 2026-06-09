@@ -8,7 +8,6 @@
 #include <cmath>
 #include <functional>
 #include <string>
-#include <unordered_map>
 #include <utility>
 
 namespace components::workshop {
@@ -81,7 +80,7 @@ public:
     }
 
     void build() {
-        HeartSwitchState& state = states()[id_];
+        HeartSwitchState& state = ui_.state<HeartSwitchState>(id_);
         if (!state.initialized) {
             state.initialized = true;
             state.lastChecked = checked_;
@@ -135,9 +134,8 @@ public:
                 if (state.celebrationSeconds > 0.0f) {
                     ui_.stack(id_ + ".ticker")
                         .size(1.0f, 1.0f)
-                        .onFrame([id = id_](float deltaSeconds) {
-                            HeartSwitchState& tickState = states()[id];
-                            tickState.celebrationSeconds = std::max(0.0f, tickState.celebrationSeconds - deltaSeconds);
+                        .onFrame([state = &state](float deltaSeconds) {
+                            state->celebrationSeconds = std::max(0.0f, state->celebrationSeconds - deltaSeconds);
                         })
                         .build();
                 }
@@ -153,11 +151,6 @@ private:
     };
 
     static constexpr float kCelebrationDuration = 0.50f;
-
-    static std::unordered_map<std::string, HeartSwitchState>& states() {
-        static std::unordered_map<std::string, HeartSwitchState> values;
-        return values;
-    }
 
     static core::Color transparent() {
         return {0.0f, 0.0f, 0.0f, 0.0f};

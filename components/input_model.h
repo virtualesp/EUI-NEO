@@ -7,7 +7,6 @@
 #include <cmath>
 #include <cstddef>
 #include <string>
-#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -277,11 +276,6 @@ struct InputModel {
             }
         }
     };
-
-    static InputState& stateFor(const std::string& id) {
-        static std::unordered_map<std::string, InputState> states;
-        return states[id];
-    }
 
     static std::string filteredText(const std::string& input, bool multiline) {
         std::string output;

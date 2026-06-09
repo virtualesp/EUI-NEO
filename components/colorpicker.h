@@ -10,7 +10,6 @@
 #include <cstdio>
 #include <functional>
 #include <string>
-#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -74,7 +73,7 @@ public:
         const float panelScale = open_ ? 1.0f : 0.965f;
         const float panelOffsetY = open_ ? 0.0f : 14.0f;
         const std::function<void(bool)> onOpenChange = onOpenChange_;
-        ColorDraft* draft = &draftFor(id_);
+        ColorDraft* draft = &ui_.state<ColorDraft>(id_ + ".draft");
         syncDraft(*draft, open_, value_);
 
         ui_.stack(id_)
@@ -119,11 +118,6 @@ private:
         bool active = false;
         core::Color value = theme::color(0.22f, 0.50f, 0.88f);
     };
-
-    static ColorDraft& draftFor(const std::string& id) {
-        static std::unordered_map<std::string, ColorDraft> drafts;
-        return drafts[id];
-    }
 
     static void syncDraft(ColorDraft& draft, bool open, core::Color value) {
         if (!open || !draft.active) {

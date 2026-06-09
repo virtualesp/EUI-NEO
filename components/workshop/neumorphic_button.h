@@ -6,7 +6,6 @@
 #include <algorithm>
 #include <functional>
 #include <string>
-#include <unordered_map>
 #include <utility>
 
 namespace components::workshop {
@@ -132,7 +131,8 @@ public:
         const float buttonH = std::max(1.0f, h - padY * 2.0f);
         const float radius = std::min(style_.radius, buttonH * 0.5f);
         const float font = fontSize_ > 0.0f ? fontSize_ : std::max(12.0f, buttonH * 0.38f);
-        const bool pressed = pressedStates()[id_];
+        bool* pressedState = &ui_.state<bool>(id_ + ".pressed");
+        const bool pressed = *pressedState;
         const core::Color surface = pressed ? style_.pressed : style_.surface;
         const core::Color hover = pressed ? style_.pressed : style_.hover;
         const core::Color text = pressed ? style_.pressedText : style_.text;
@@ -177,11 +177,11 @@ public:
                     .border(1.0f, style_.border)
                     .disabled(disabled_)
                     .transition(transition_)
-                    .onPress([id = id_](const core::PointerEvent&, const core::Rect&) {
-                        pressedStates()[id] = true;
+                    .onPress([pressedState](const core::PointerEvent&, const core::Rect&) {
+                        *pressedState = true;
                     })
-                    .onRelease([id = id_](const core::PointerEvent&, const core::Rect&) {
-                        pressedStates()[id] = false;
+                    .onRelease([pressedState](const core::PointerEvent&, const core::Rect&) {
+                        *pressedState = false;
                     })
                     .onClick(onClick_)
                     .build();
@@ -233,11 +233,6 @@ private:
     static core::Color transparentLike(core::Color color) {
         color.a = 0.0f;
         return color;
-    }
-
-    static std::unordered_map<std::string, bool>& pressedStates() {
-        static std::unordered_map<std::string, bool> states;
-        return states;
     }
 
     core::dsl::Ui& ui_;

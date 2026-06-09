@@ -4,9 +4,11 @@
 #include "core/dsl.h"
 
 #include <algorithm>
+#include <cmath>
 #include <functional>
 #include <string>
 #include <utility>
+#include <vector>
 
 namespace components {
 
@@ -27,6 +29,8 @@ public:
     ScrollViewBuilder& z(int value) { return zIndex(value); }
     ScrollViewBuilder& style(const ScrollStyle& value) { scrollStyle_ = value; return *this; }
     ScrollViewBuilder& theme(const theme::ThemeColorTokens& tokens) { scrollStyle_ = ScrollStyle(tokens); return *this; }
+    ScrollViewBuilder& contentKey(std::string value) { contentKey_ = std::move(value); return *this; }
+    ScrollViewBuilder& measureKey(std::string value) { return contentKey(std::move(value)); }
     ScrollViewBuilder& transition(const core::Transition& value) { transition_ = value; return *this; }
     ScrollViewBuilder& transition(float duration, core::Ease ease = core::Ease::OutCubic) {
         transition_ = core::Transition::make(duration, ease);
@@ -44,12 +48,17 @@ public:
     }
 
     void build() {
-        const float initialContentHeight = measureContentHeight(width_, height_);
+        MeasureCache* cache = contentKey_.empty() ? nullptr : &ui_.state<MeasureCache>(id_ + ".measure");
+        const float initialContentHeight = contentKey_.empty()
+            ? measureContentHeight(width_, height_)
+            : cachedContentHeight(*cache, width_, height_);
         const bool scrollable = initialContentHeight > height_;
         const float scrollWidth = scrollable ? scrollbarWidth_ : 0.0f;
         const float scrollGap = scrollable ? scrollbarGap_ : 0.0f;
         const float contentWidth = std::max(0.0f, width_ - scrollWidth - scrollGap);
-        const float contentHeight = scrollable ? measureContentHeight(contentWidth, height_) : initialContentHeight;
+        const float contentHeight = scrollable
+            ? (contentKey_.empty() ? measureContentHeight(contentWidth, height_) : cachedContentHeight(*cache, contentWidth, height_))
+            : initialContentHeight;
         const float maxOffset = std::max(0.0f, contentHeight - height_);
         const float currentOffset = std::clamp(offset_, 0.0f, maxOffset);
         const std::function<void(float)> onChange = onChange_;
@@ -93,6 +102,40 @@ public:
     }
 
 private:
+    struct MeasureCache {
+        struct Entry {
+            float width = -1.0f;
+            float viewportHeight = -1.0f;
+            float gap = -1.0f;
+            float height = 0.0f;
+            std::string contentKey;
+        };
+
+        std::vector<Entry> entries;
+    };
+
+    float cachedContentHeight(MeasureCache& cache, float contentWidth, float viewportHeight) const {
+        for (const MeasureCache::Entry& entry : cache.entries) {
+            if (closeEnough(entry.width, contentWidth) &&
+                closeEnough(entry.viewportHeight, viewportHeight) &&
+                closeEnough(entry.gap, gap_) &&
+                entry.contentKey == contentKey_) {
+                return entry.height;
+            }
+        }
+
+        const float height = measureContentHeight(contentWidth, viewportHeight);
+        if (cache.entries.size() >= 4) {
+            cache.entries.erase(cache.entries.begin());
+        }
+        cache.entries.push_back({contentWidth, viewportHeight, gap_, height, contentKey_});
+        return height;
+    }
+
+    static bool closeEnough(float left, float right) {
+        return std::fabs(left - right) <= 0.5f;
+    }
+
     float measureContentHeight(float contentWidth, float viewportHeight) const {
         if (!content_) {
             return viewportHeight;
@@ -123,6 +166,7 @@ private:
     core::Transition transition_ = core::Transition::make(0.12f, core::Ease::OutCubic);
     std::function<void(float)> onChange_;
     std::function<void(core::dsl::Ui&, float, float)> content_;
+    std::string contentKey_;
     float width_ = 320.0f;
     float height_ = 220.0f;
     float offset_ = 0.0f;

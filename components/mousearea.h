@@ -7,7 +7,6 @@
 #include <functional>
 #include <string>
 #include <type_traits>
-#include <unordered_map>
 #include <utility>
 
 namespace components {
@@ -91,7 +90,7 @@ public:
     MouseAreaBuilder& onContextMenu(std::function<void(const MouseEvent&)> callback) { onContextMenu_ = std::move(callback); return *this; }
 
     void build() {
-        MouseAreaState* state = &stateFor(id_);
+        MouseAreaState* state = &ui_.state<MouseAreaState>(id_);
         const float safeWidth = std::max(1.0f, width_);
         const float safeHeight = std::max(1.0f, height_);
         const float scrollStep = scrollStep_;
@@ -252,11 +251,6 @@ private:
         MouseEvent lastEvent;
         MouseDragEvent lastDrag;
     };
-
-    static MouseAreaState& stateFor(const std::string& id) {
-        static std::unordered_map<std::string, MouseAreaState> states;
-        return states[id];
-    }
 
     static float scaleFor(float actual, float expected) {
         return actual > 0.0f && expected > 0.0f ? actual / expected : 1.0f;

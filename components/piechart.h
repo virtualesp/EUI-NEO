@@ -7,7 +7,6 @@
 #include <cstddef>
 #include <cmath>
 #include <string>
-#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -75,7 +74,7 @@ public:
         if (labels_.empty()) {
             labels_ = {"Blue", "Green", "Orange", "Pink"};
         }
-        AnimState& anim = animStateFor(id_);
+        AnimState& anim = ui_.state<AnimState>(id_ + ".anim");
         syncAnimation(anim);
         const std::vector<float>& displayValues = anim.display;
         const float total = valueTotal(displayValues);
@@ -149,11 +148,6 @@ private:
         std::vector<float> target;
         bool animating = false;
     };
-
-    static AnimState& animStateFor(const std::string& id) {
-        static std::unordered_map<std::string, AnimState> states;
-        return states[id];
-    }
 
     static bool closeValues(const std::vector<float>& left, const std::vector<float>& right) {
         if (left.size() != right.size()) {

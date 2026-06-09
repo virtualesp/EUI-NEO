@@ -88,7 +88,7 @@ public:
         const float inset = inset_;
         const float fontSize = fontSize_;
         const std::string fontFamily = fontFamily_;
-        InputState& state = InputModel::stateFor(id_);
+        InputState& state = ui_.state<InputState>(id_);
         if (state.text != text_) {
             state.text = text_;
             ++state.textRevision;
