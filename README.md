@@ -93,9 +93,9 @@ Tagged releases (`v*`) build Windows, Linux, and macOS packages through GitHub A
 
 ## Use In Your Project
 
-There are three practical integration paths. Start with the public facade header unless you already need a custom window loop.
+The recommended path is to add EUI-NEO as a CMake subdirectory, use the provided app main source, and write your UI through the public facade header.
 
-Minimal CMake project integration:
+Minimal CMake:
 
 ```cmake
 cmake_minimum_required(VERSION 3.14)
@@ -113,7 +113,7 @@ add_executable(my_app
 eui_neo_configure_app(my_app)
 ```
 
-`app.cpp` only needs the public entry header plus an app config and compose function:
+Minimal `app.cpp`:
 
 ```cpp
 #include "eui_neo.h"
@@ -144,7 +144,7 @@ void compose(eui::Ui& ui, const eui::Screen& screen) {
 } // namespace app
 ```
 
-Build your project:
+Build:
 
 ```sh
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
@@ -152,46 +152,7 @@ cmake --build build --parallel
 ./build/my_app
 ```
 
-### 1. Public Facade Header
-
-This is the simplest app-level integration. Your app source includes one public header:
-
-```cpp
-#include "eui_neo.h"
-```
-
-Add EUI-NEO as a subdirectory and use the provided app main source:
-
-```cmake
-add_subdirectory(external/EUI-NEO)
-
-add_executable(my_app external/EUI-NEO/core/app/glfw_app_main.cpp app.cpp)
-eui_neo_configure_app(my_app)
-```
-
-Implement `app::dslAppConfig()` and `app::compose()` in `app.cpp`. EUI-NEO owns the window, event loop, selected render backend, and asset copying. This is a single public facade include, not a pure header-only library.
-
-GLFW is the default backend. For SDL2, configure with `-DEUI_WINDOW_BACKEND=sdl2` and use `external/EUI-NEO/core/app/sdl2_app_main.cpp` instead of the GLFW app main source.
-
-### 2. Static Library Target
-
-For an existing application or a custom main loop, link the exported static library target directly:
-
-```cmake
-add_subdirectory(external/EUI-NEO)
-
-add_executable(my_app main.cpp app.cpp)
-target_link_libraries(my_app PRIVATE eui::neo)
-eui_neo_copy_assets(my_app)
-```
-
-Use this path when your project already owns the native window, rendering context, event pump, or application lifecycle. Keep `#include "eui_neo.h"` for normal UI code; only the integration boundary should include lower-level runtime headers.
-
-### 3. Develop Inside `examples/`
-
-For quick experiments or new built-in demos, add a new file such as `examples/my_app.cpp`, include `eui_neo.h`, and implement `app::dslAppConfig()` plus `app::compose()`. Top-level builds automatically create one executable per `examples/*.cpp` file. For larger demos, use the `gallery` pattern: keep the app shell in `examples/gallery.cpp` and place QML-like page objects with local state under `examples/pages/*.h`.
-
-When EUI-NEO is added as a subdirectory, bundled examples are disabled by default. Set `-DEUI_BUILD_APPS=ON` to build `gallery`, `eui_demo`, `serial_tool`, and the other sample apps. See [Integration Guide](docs/集成指南.md) for complete CMake snippets, `FetchContent`, and embedded GLFW loop notes.
+EUI-NEO owns the window, event loop, selected render backend, and asset copying in this setup. For SDL2, Vulkan, `FetchContent`, custom main loops, or building the bundled examples from a parent project, see the [Integration Guide](docs/集成指南.md).
 
 ## Project Layout
 

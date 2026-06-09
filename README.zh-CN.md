@@ -93,9 +93,9 @@ sudo apt-get install -y libsdl2-dev
 
 ## 接入到你的项目
 
-推荐按下面三种方式选择。普通应用先走公共 facade 头文件，只有已有窗口循环时再直接接静态库。
+推荐方式是把 EUI-NEO 作为 CMake 子目录加入，使用框架提供的 app main，并通过公共 facade 头文件编写 UI。
 
-最小 CMake 项目可以这样引入：
+最小 CMake：
 
 ```cmake
 cmake_minimum_required(VERSION 3.14)
@@ -113,7 +113,7 @@ add_executable(my_app
 eui_neo_configure_app(my_app)
 ```
 
-`app.cpp` 只需要包含公共入口并实现配置和 compose：
+最小 `app.cpp`：
 
 ```cpp
 #include "eui_neo.h"
@@ -144,7 +144,7 @@ void compose(eui::Ui& ui, const eui::Screen& screen) {
 } // namespace app
 ```
 
-构建自己的项目：
+构建：
 
 ```sh
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
@@ -152,46 +152,7 @@ cmake --build build --parallel
 ./build/my_app
 ```
 
-### 1. 公共头文件方式
-
-这是最简单的完整 app 接入方式。你的应用源码只需要包含公共入口：
-
-```cpp
-#include "eui_neo.h"
-```
-
-把 EUI-NEO 作为子目录加入，并使用框架提供的 app main：
-
-```cmake
-add_subdirectory(external/EUI-NEO)
-
-add_executable(my_app external/EUI-NEO/core/app/glfw_app_main.cpp app.cpp)
-eui_neo_configure_app(my_app)
-```
-
-然后在 `app.cpp` 里实现 `app::dslAppConfig()` 和 `app::compose()`。EUI-NEO 会接管窗口、事件循环、当前选择的渲染后端和资源复制。这里是“单个公共 facade 头文件入口”，不是纯 header-only 库。
-
-默认窗口后端是 GLFW。需要 SDL2 时，配置 `-DEUI_WINDOW_BACKEND=sdl2`，并把 app main 换成 `external/EUI-NEO/core/app/sdl2_app_main.cpp`。
-
-### 2. 静态库方式
-
-如果你的项目已经有自己的 main、窗口、渲染 context 或事件循环，可以直接链接导出的静态库 target：
-
-```cmake
-add_subdirectory(external/EUI-NEO)
-
-add_executable(my_app main.cpp app.cpp)
-target_link_libraries(my_app PRIVATE eui::neo)
-eui_neo_copy_assets(my_app)
-```
-
-普通 UI 代码仍然优先 `#include "eui_neo.h"`；只有接入边界需要碰底层 runtime / platform 头文件。
-
-### 3. 直接在 `examples/` 开发
-
-快速实验或新增内置示例时，直接创建 `examples/my_app.cpp`，包含 `eui_neo.h`，实现 `app::dslAppConfig()` 和 `app::compose()`。顶层构建会自动为每个 `examples/*.cpp` 生成一个可执行程序。较大的 demo 推荐使用 `gallery` 这种组织方式：`examples/gallery.cpp` 保留 app 壳、路由和共享主题，具体页面放到 `examples/pages/*.h`，每个页面对象自己持有状态并声明画面，接近 QML 页面组件的写法。
-
-EUI-NEO 作为子目录接入时，默认不会构建仓库自带示例。需要构建 `gallery`、`eui_demo`、`serial_tool` 等示例时，配置 `-DEUI_BUILD_APPS=ON`。完整 CMake 片段、`FetchContent` 和嵌入已有 GLFW 主循环的写法见 [集成指南](docs/集成指南.md)。
+这种方式下，EUI-NEO 会接管窗口、事件循环、当前选择的渲染后端和资源复制。SDL2、Vulkan、`FetchContent`、自定义 main loop，以及在父项目里构建仓库自带示例的写法，见 [集成指南](docs/集成指南.md)。
 
 ## 目录结构
 
