@@ -136,6 +136,8 @@ input {
   gap: 24px;
   align-items: center;
   height: 72px;
+  margin-inline: calc((100% - 100vw) / 2);
+  padding-inline: max(17px, calc((100vw - 1480px) / 2 + 17px));
   border-bottom: 1px solid var(--line);
   background: var(--bg);
   background: color-mix(in srgb, var(--bg) 84%, transparent);
