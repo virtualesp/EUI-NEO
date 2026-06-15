@@ -53,12 +53,11 @@ jobs:
 
       - name: install windows deps
         if: matrix.platform == 'windows'
-        shell: pwsh
-        run: |
-          vcpkg install glslang:x64-windows-static
-          $validator = Get-ChildItem "$env:VCPKG_INSTALLATION_ROOT/installed" -Recurse -Filter glslangValidator.exe -File | Select-Object -First 1
-          if (-not $validator) { throw "glslangValidator.exe was not installed by vcpkg." }
-          $validator.DirectoryName | Out-File -FilePath $env:GITHUB_PATH -Append
+        uses: humbletim/setup-vulkan-sdk@v1.2.1
+        with:
+          vulkan-query-version: 1.4.309.0
+          vulkan-components: Glslang
+          vulkan-use-cache: true
 
       - name: configure windows
         if: matrix.platform == 'windows'
