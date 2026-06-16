@@ -668,7 +668,7 @@ inline void Runtime::updateElementTree(
     const RenderTransform identity;
     const std::vector<const Element*> roots = orderedElements(ui_.roots());
     for (const Element* root : roots) {
-        updateElementTree(*root, event, deltaSeconds, dpiScale, hoverTargetId, identity, false);
+        updateElementTree(*root, event, deltaSeconds, dpiScale, hoverTargetId, identity, false, false);
     }
 }
 
@@ -679,10 +679,16 @@ inline void Runtime::updateElementTree(
     float dpiScale,
     const std::string& hoverTargetId,
     const RenderTransform& inheritedTransform,
-    bool ancestorFrameChanged) {
+    bool ancestorFrameChanged,
+    bool ancestorDisabled) {
+    const bool disabledTree = ancestorDisabled || element.disabled;
     const bool frameTargetChanged = updateFrameTarget(element);
     updateExplicitDirtyKey(element, dpiScale, inheritedTransform);
-    updateInteraction(element, event, dpiScale, hoverTargetId, inheritedTransform);
+    if (disabledTree) {
+        interactionInstance(element.id).state.update({}, event, false, false);
+    } else {
+        updateInteraction(element, event, dpiScale, hoverTargetId, inheritedTransform);
+    }
     updateTimer(element, deltaSeconds);
     updateFrameCallback(element, deltaSeconds);
 
@@ -704,7 +710,7 @@ inline void Runtime::updateElementTree(
     const RenderTransform renderTransform = resolveRenderTransform(element, dpiScale, inheritedTransform);
     const std::vector<const Element*> children = orderedElements(element.children);
     for (const Element* child : children) {
-        updateElementTree(*child, event, deltaSeconds, dpiScale, hoverTargetId, renderTransform, childAncestorFrameChanged);
+        updateElementTree(*child, event, deltaSeconds, dpiScale, hoverTargetId, renderTransform, childAncestorFrameChanged, disabledTree);
     }
 }
 

@@ -535,6 +535,7 @@ components::button(ui, "save")
 - 按 id 缓存 Rect / Text / Image / Polygon primitive 实例。
 - 每帧回收已经不在 DSL 树里的 primitive、交互状态和 dirty key 实例。
 - 统一处理 pointer event、hit-test、press capture、click。
+- disabled 父节点会禁用整棵子树的交互、焦点、文本输入和 IME 光标状态。
 - 维护 scroll state；滚轮和滚动条拖动只更新滚动 transform 和 dirty rect，不触发整页 compose。
 - interactive blocker 会阻断下层 hover / click / focus；弹层、侧边栏、遮罩和面板背景应声明透明或实体 hit rect 来吃掉事件。
 - 维护 hover / press 动画状态。

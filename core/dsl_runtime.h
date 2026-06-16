@@ -105,7 +105,8 @@ private:
                            float dpiScale,
                            const std::string& hoverTargetId,
                            const RenderTransform& inheritedTransform,
-                           bool ancestorFrameChanged);
+                           bool ancestorFrameChanged,
+                           bool ancestorDisabled);
 
     runtime::RectInstance& rectInstance(const std::string& id);
 
@@ -137,6 +138,13 @@ private:
 
     std::string capturedInteractionId() const;
 
+    bool isElementInDisabledTree(const std::string& id) const;
+
+    bool findElementDisabledState(const Element& element,
+                                  const std::string& id,
+                                  bool ancestorDisabled,
+                                  bool& disabledTree) const;
+
     std::string hitTestInteractive(const PointerEvent& event, float dpiScale) const;
 
     std::string hitTestFocusable(const PointerEvent& event, float dpiScale) const;
@@ -154,6 +162,7 @@ private:
                         Predicate& predicate,
                         bool hasClip,
                         const Rect& clipRect,
+                        bool ancestorDisabled,
                         std::string& targetId) const;
 
     bool hitTestFocusableElement(const Element& element,
@@ -162,6 +171,7 @@ private:
                                  const RenderTransform& inheritedTransform,
                                  bool hasClip,
                                  const Rect& clipRect,
+                                 bool ancestorDisabled,
                                  std::string& targetId) const;
 
     void setFocusedId(const std::string& id);

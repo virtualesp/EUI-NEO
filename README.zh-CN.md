@@ -87,9 +87,9 @@ sudo apt-get install -y ninja-build libx11-dev libxrandr-dev libxinerama-dev lib
 sudo apt-get install -y libsdl2-dev
 ```
 
-顶层构建会为 `examples/*.cpp` 下的每个页面源文件生成一个可执行程序，例如 `gallery` 和 `eui_demo`。构建后会自动把 `assets/` 复制到可执行文件目录。
+顶层构建会为 `examples/*.cpp` 下的每个页面源文件生成一个可执行程序，例如 `gallery`、`chat` 和 `eui_demo`。构建后会自动把 `assets/` 复制到可执行文件目录。
 
-推送 `v*` tag 后，GitHub Actions 会构建 Windows、Linux、macOS 包，并且 release assets 会上传运行包和 SDK 包。
+推送 `v*` tag 后，GitHub Actions 会构建 Windows、Linux、macOS 包，并且 release assets 会上传运行包和 SDK 包。运行包会自动收集所有由 `examples/*.cpp` 生成的可执行文件。
 
 ## 接入到你的项目
 

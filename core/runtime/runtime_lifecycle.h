@@ -29,6 +29,9 @@ inline void Runtime::compose(const std::string& pageId, float logicalWidth, floa
             ui_.setFocusedId(focusedId_);
         }
     }
+    if (!focusedId_.empty() && isElementInDisabledTree(focusedId_)) {
+        setFocusedId({});
+    }
 
     if (elementStructure_ != previousStructure) {
         needsRender_ = true;

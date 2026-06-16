@@ -264,6 +264,7 @@ bool consumeAnyTextReady() {
 }
 
 void postNetworkReadyEvent() {
+    gAnyTextReady.store(true);
     window::postEmptyEvent();
 }
 

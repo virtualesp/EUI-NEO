@@ -4,11 +4,46 @@ namespace core::dsl {
 
 inline std::string Runtime::capturedInteractionId() const {
     for (const auto& item : interactions_) {
-        if (item.second.state.active && ui_.find(item.first)) {
+        if (item.second.state.active && ui_.find(item.first) && !isElementInDisabledTree(item.first)) {
             return item.first;
         }
     }
     return {};
+}
+
+inline bool Runtime::isElementInDisabledTree(const std::string& id) const {
+    if (id.empty()) {
+        return false;
+    }
+
+    bool disabledTree = false;
+    const std::string resolvedId = ui_.resolveId(id);
+    const std::vector<const Element*> roots = orderedElements(ui_.roots());
+    for (const Element* root : roots) {
+        if (findElementDisabledState(*root, resolvedId, false, disabledTree)) {
+            return disabledTree;
+        }
+    }
+    return false;
+}
+
+inline bool Runtime::findElementDisabledState(
+    const Element& element,
+    const std::string& id,
+    bool ancestorDisabled,
+    bool& disabledTree) const {
+    const bool currentDisabledTree = ancestorDisabled || element.disabled;
+    if (element.id == id) {
+        disabledTree = currentDisabledTree;
+        return true;
+    }
+
+    for (const auto& child : element.children) {
+        if (findElementDisabledState(*child, id, currentDisabledTree, disabledTree)) {
+            return true;
+        }
+    }
+    return false;
 }
 
 inline std::string Runtime::hitTestInteractive(const PointerEvent& event, float dpiScale) const {
@@ -22,7 +57,7 @@ inline std::string Runtime::hitTestFocusable(const PointerEvent& event, float dp
     const RenderTransform identity;
     const std::vector<const Element*> roots = orderedElements(ui_.roots());
     for (auto it = roots.rbegin(); it != roots.rend(); ++it) {
-        if (hitTestFocusableElement(**it, event, dpiScale, identity, false, {}, targetId)) {
+        if (hitTestFocusableElement(**it, event, dpiScale, identity, false, {}, false, targetId)) {
             break;
         }
     }
@@ -41,7 +76,7 @@ inline std::string Runtime::hitTest(const PointerEvent& event, float dpiScale, P
     const RenderTransform identity;
     const std::vector<const Element*> roots = orderedElements(ui_.roots());
     for (auto it = roots.rbegin(); it != roots.rend(); ++it) {
-        if (hitTestElement(**it, event, dpiScale, identity, predicate, false, {}, targetId)) {
+        if (hitTestElement(**it, event, dpiScale, identity, predicate, false, {}, false, targetId)) {
             break;
         }
     }
@@ -57,7 +92,9 @@ inline bool Runtime::hitTestElement(
     Predicate& predicate,
     bool hasClip,
     const Rect& clipRect,
+    bool ancestorDisabled,
     std::string& targetId) const {
+    const bool disabledTree = ancestorDisabled || element.disabled;
     const RenderTransform renderTransform = resolveRenderTransform(element, dpiScale, inheritedTransform);
     Rect effectiveClip = clipRect;
     bool effectiveHasClip = hasClip;
@@ -80,12 +117,12 @@ inline bool Runtime::hitTestElement(
 
     const std::vector<const Element*> children = orderedElements(element.children);
     for (auto it = children.rbegin(); it != children.rend(); ++it) {
-        if (hitTestElement(**it, event, dpiScale, renderTransform, predicate, effectiveHasClip, effectiveClip, targetId)) {
+        if (hitTestElement(**it, event, dpiScale, renderTransform, predicate, effectiveHasClip, effectiveClip, disabledTree, targetId)) {
             return true;
         }
     }
 
-    if (predicate(element) && hitContains(element, event, dpiScale, bounds, renderTransform)) {
+    if (!disabledTree && predicate(element) && hitContains(element, event, dpiScale, bounds, renderTransform)) {
         targetId = element.id;
         return true;
     }
@@ -99,7 +136,9 @@ inline bool Runtime::hitTestFocusableElement(
     const RenderTransform& inheritedTransform,
     bool hasClip,
     const Rect& clipRect,
+    bool ancestorDisabled,
     std::string& targetId) const {
+    const bool disabledTree = ancestorDisabled || element.disabled;
     const RenderTransform renderTransform = resolveRenderTransform(element, dpiScale, inheritedTransform);
     Rect effectiveClip = clipRect;
     bool effectiveHasClip = hasClip;
@@ -122,11 +161,14 @@ inline bool Runtime::hitTestFocusableElement(
 
     const std::vector<const Element*> children = orderedElements(element.children);
     for (auto it = children.rbegin(); it != children.rend(); ++it) {
-        if (hitTestFocusableElement(**it, event, dpiScale, renderTransform, effectiveHasClip, effectiveClip, targetId)) {
+        if (hitTestFocusableElement(**it, event, dpiScale, renderTransform, effectiveHasClip, effectiveClip, disabledTree, targetId)) {
             return true;
         }
     }
 
+    if (disabledTree) {
+        return false;
+    }
     if (!hitContains(element, event, dpiScale, bounds, renderTransform)) {
         return false;
     }
@@ -188,6 +230,11 @@ inline void Runtime::updateTextInput(const KeyboardEvent& event) {
         return;
     }
 
+    if (isElementInDisabledTree(focusedId_)) {
+        setFocusedId({});
+        return;
+    }
+
     if (const Element* element = ui_.find(focusedId_)) {
         if (element->onTextInput && !element->disabled) {
             element->onTextInput(event);
@@ -208,7 +255,7 @@ inline void Runtime::updateImeCursorRect(core::window::Handle window, float dpiS
     }
 
     const Element* element = ui_.find(focusedId_);
-    if (element == nullptr || !element->hasImeRect) {
+    if (element == nullptr || isElementInDisabledTree(focusedId_) || !element->hasImeRect) {
         imeCursorRectValid_ = false;
         return;
     }
