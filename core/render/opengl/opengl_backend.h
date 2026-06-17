@@ -44,6 +44,7 @@ public:
 
 private:
     void releasePrimitiveResources();
+    void releaseTextResources();
     bool ensureImageResources();
     unsigned int compileImageShader(unsigned int type, const char* source) const;
     void releaseImageResources();

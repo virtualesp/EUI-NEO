@@ -105,6 +105,7 @@ public:
                     .transformOrigin(0.5f, 0.5f)
                     .transition(transition_)
                     .animate(core::AnimProperty::Opacity | core::AnimProperty::Transform)
+                    .disabled(!open_)
                     .content([&] {
                         ui_.rect(id_ + ".panel.bg")
                             .size(width, height)
@@ -119,7 +120,6 @@ public:
                             .states(theme::color(0.0f, 0.0f, 0.0f, 0.0f),
                                     theme::color(0.0f, 0.0f, 0.0f, 0.0f),
                                     theme::color(0.0f, 0.0f, 0.0f, 0.0f))
-                            .disabled(!open_)
                             .onClick([] {})
                             .build();
 

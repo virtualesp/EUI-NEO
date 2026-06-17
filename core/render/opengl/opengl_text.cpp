@@ -32,9 +32,13 @@ struct TextRenderResources {
     TextAtlasTexture color;
 };
 
-TextRenderResources& textResources() {
+std::unordered_map<window::ContextKey, TextRenderResources>& textResourcesByContext() {
     static std::unordered_map<window::ContextKey, TextRenderResources> resourcesByContext;
-    return resourcesByContext[window::currentContextKey()];
+    return resourcesByContext;
+}
+
+TextRenderResources& textResources() {
+    return textResourcesByContext()[window::currentContextKey()];
 }
 
 GLuint compileShader(GLenum type, const char* source) {
@@ -56,6 +60,21 @@ void destroyAtlasTexture(TextAtlasTexture& atlas) {
         glDeleteTextures(1, &atlas.texture);
     }
     atlas = {};
+}
+
+void destroyTextRenderResources(TextRenderResources& resources) {
+    if (resources.vbo != 0) {
+        glDeleteBuffers(1, &resources.vbo);
+    }
+    if (resources.vao != 0) {
+        glDeleteVertexArrays(1, &resources.vao);
+    }
+    if (resources.shaderProgram != 0) {
+        glDeleteProgram(resources.shaderProgram);
+    }
+    destroyAtlasTexture(resources.gray);
+    destroyAtlasTexture(resources.color);
+    resources = {};
 }
 
 bool ensureTextRenderResources(TextRenderResources& resources) {
@@ -246,6 +265,17 @@ void OpenGLRenderBackend::drawText(const TextDrawCommand& command, int windowWid
                  command.vertices,
                  GL_DYNAMIC_DRAW);
     glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(command.vertexFloatCount / 5));
+}
+
+void OpenGLRenderBackend::releaseTextResources() {
+    auto& resourcesByContext = textResourcesByContext();
+    const auto current = window::currentContextKey();
+    const auto item = resourcesByContext.find(current);
+    if (item != resourcesByContext.end()) {
+        destroyTextRenderResources(item->second);
+        resourcesByContext.erase(item);
+    }
+    resetStateCache();
 }
 
 } // namespace core::render::opengl

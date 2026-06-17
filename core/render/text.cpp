@@ -140,6 +140,11 @@ SharedTextAtlas& sharedTextAtlas() {
     return atlas;
 }
 
+std::uint64_t& textAtlasGenerationCounter() {
+    static std::uint64_t generation = 0;
+    return generation;
+}
+
 bool ensureAtlasPage(AtlasPage& page, int width, int height, int channels) {
     if (!page.pixels.empty()) {
         return true;
@@ -151,7 +156,7 @@ bool ensureAtlasPage(AtlasPage& page, int width, int height, int channels) {
     page.x = 1;
     page.y = 1;
     page.rowHeight = 0;
-    page.generation = 1;
+    page.generation = ++textAtlasGenerationCounter();
     page.pixels.assign(static_cast<std::size_t>(width) * static_cast<std::size_t>(height) * static_cast<std::size_t>(channels), 0);
     return !page.pixels.empty();
 }
@@ -865,7 +870,7 @@ bool appendToAtlas(AtlasPage& page,
 
     page.x += width + 1;
     page.rowHeight = std::max(page.rowHeight, height);
-    ++page.generation;
+    page.generation = ++textAtlasGenerationCounter();
     return true;
 }
 

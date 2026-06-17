@@ -338,7 +338,7 @@ if(EUI_ENABLE_INSTALL)
         RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
         INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
     )
-    foreach(optional_target glad glfw freetype png_static eui_zlib harfbuzz eui_md4c)
+    foreach(optional_target glad glfw freetype png_static eui_zlib harfbuzz eui_md4c SDL2-static)
         if(TARGET ${optional_target})
             install(TARGETS ${optional_target}
                 EXPORT EuiNeoTargets

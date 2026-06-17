@@ -797,7 +797,7 @@ void composeMessages(eui::Ui& ui, ChatState& state, float width, float height) {
 
 void composeEndpoint(eui::Ui& ui, const eui::Screen& screen, ChatState& state, const std::string& idPrefix) {
     const float margin = std::clamp(screen.width * 0.035f, 18.0f, 32.0f);
-    const float width = std::max(560.0f, screen.width - margin * 2.0f);
+    const float width = std::max(360.0f, screen.width - margin * 2.0f);
     const float x = (screen.width - width) * 0.5f;
     const float top = 22.0f;
     const float gap = 12.0f;
@@ -810,10 +810,10 @@ void composeEndpoint(eui::Ui& ui, const eui::Screen& screen, ChatState& state, c
     const float subtitleH = 24.0f;
     const float logH = std::max(170.0f, contentH - titleH - subtitleH - settingsH - actionH - gap * 4.0f);
     const float settingsContentW = std::max(0.0f, width - cardInset * 2.0f);
-    const float fieldW = std::max(160.0f, (settingsContentW - gap) * 0.5f);
+    const float fieldW = std::max(0.0f, (settingsContentW - gap) * 0.5f);
     const float logContentW = std::max(0.0f, width - cardInset * 2.0f);
-    const float actionButtonW = 82.0f;
-    const float actionInputW = std::max(220.0f, width - actionButtonW * 3.0f - gap * 3.0f);
+    const float actionButtonW = std::clamp((width - gap * 3.0f) * 0.18f, 64.0f, 82.0f);
+    const float actionInputW = std::max(0.0f, width - actionButtonW * 3.0f - gap * 3.0f);
 
     ui.stack(idPrefix + ".root")
         .size(screen.width, screen.height)
