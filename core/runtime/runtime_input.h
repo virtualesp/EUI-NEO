@@ -323,6 +323,7 @@ inline void Runtime::updateInteraction(
     if (enabled && instance.state.clicked && element.onClick) {
         element.onClick();
         needsCompose_ = true;
+        needsRender_ = true;
     }
 
     if (enabled && instance.state.released && element.onRelease) {
