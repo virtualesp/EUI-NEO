@@ -157,6 +157,14 @@ struct FrameTargetInstance {
     bool seen = false;
 };
 
+struct PaintBoundsInstance {
+    Rect own;
+    Rect subtree;
+    bool hasOwn = false;
+    bool hasSubtree = false;
+    bool seen = false;
+};
+
 struct DependentVisualState {
     Rect rect;
     float opacity = 1.0f;

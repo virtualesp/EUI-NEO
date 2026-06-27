@@ -234,6 +234,7 @@ inline void Runtime::shutdown(bool releaseCachedImageTextures) {
     timers_.clear();
     dependentVisualStates_.clear();
     frameTargets_.clear();
+    paintBounds_.clear();
     elementStructure_.clear();
     ui_.clearState();
 }

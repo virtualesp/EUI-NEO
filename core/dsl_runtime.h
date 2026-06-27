@@ -99,14 +99,14 @@ private:
                            float dpiScale,
                            const std::string& hoverTargetId);
 
-    void updateElementTree(const Element& element,
-                           const PointerEvent& event,
-                           float deltaSeconds,
-                           float dpiScale,
-                           const std::string& hoverTargetId,
-                           const RenderTransform& inheritedTransform,
-                           bool ancestorFrameChanged,
-                           bool ancestorDisabled);
+    runtime::PaintBoundsInstance updateElementTree(const Element& element,
+                                                   const PointerEvent& event,
+                                                   float deltaSeconds,
+                                                   float dpiScale,
+                                                   const std::string& hoverTargetId,
+                                                   const RenderTransform& inheritedTransform,
+                                                   bool ancestorFrameChanged,
+                                                   bool ancestorDisabled);
 
     runtime::RectInstance& rectInstance(const std::string& id);
 
@@ -339,6 +339,7 @@ private:
     std::unordered_map<std::string, runtime::TimerInstance> timers_;
     std::unordered_map<std::string, runtime::DependentVisualState> dependentVisualStates_;
     std::unordered_map<std::string, runtime::FrameTargetInstance> frameTargets_;
+    std::unordered_map<std::string, runtime::PaintBoundsInstance> paintBounds_;
     std::vector<runtime::ElementSnapshot> elementStructure_;
     std::vector<runtime::LogicalDirtyRect> dirtyRects_;
     bool paintRequested_ = true;

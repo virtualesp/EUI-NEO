@@ -352,6 +352,7 @@ inline void Runtime::markInstancesUnseen() {
     runtime::markEntriesUnseen(scrollStates_);
     runtime::markEntriesUnseen(sliderStates_);
     runtime::markEntriesUnseen(frameTargets_);
+    runtime::markEntriesUnseen(paintBounds_);
 }
 
 inline void Runtime::releaseUnseenInstances() {
@@ -373,6 +374,7 @@ inline void Runtime::releaseUnseenInstances() {
     runtime::releaseUnseenEntries(scrollStates_, noop);
     runtime::releaseUnseenEntries(sliderStates_, noop);
     runtime::releaseUnseenEntries(frameTargets_, noop);
+    runtime::releaseUnseenEntries(paintBounds_, noop);
 }
 
 inline void Runtime::markTimersUnseen() {
@@ -464,7 +466,8 @@ inline RenderTransform Runtime::resolveRenderTransform(const Element& element, f
 
     if (element.kind == ElementKind::Row ||
         element.kind == ElementKind::Column ||
-        element.kind == ElementKind::Stack) {
+        element.kind == ElementKind::Stack ||
+        element.kind == ElementKind::Flow) {
         const auto layout = layouts_.find(element.id);
         if (layout != layouts_.end()) {
             const Transform local = layout->second.transform.value();
@@ -665,6 +668,7 @@ inline void Runtime::updateElementTree(
     float deltaSeconds,
     float dpiScale,
     const std::string& hoverTargetId) {
+    runtime::markEntriesUnseen(paintBounds_);
     const RenderTransform identity;
     const std::vector<const Element*> roots = orderedElements(ui_.roots());
     for (const Element* root : roots) {
@@ -672,7 +676,7 @@ inline void Runtime::updateElementTree(
     }
 }
 
-inline void Runtime::updateElementTree(
+inline runtime::PaintBoundsInstance Runtime::updateElementTree(
     const Element& element,
     const PointerEvent& event,
     float deltaSeconds,
@@ -694,7 +698,8 @@ inline void Runtime::updateElementTree(
 
     if (element.kind == ElementKind::Row ||
         element.kind == ElementKind::Column ||
-        element.kind == ElementKind::Stack) {
+        element.kind == ElementKind::Stack ||
+        element.kind == ElementKind::Flow) {
         updateLayoutElement(element, deltaSeconds, dpiScale, inheritedTransform, event, hoverTargetId);
     } else if (element.kind == ElementKind::Rect) {
         updateRect(element, deltaSeconds, dpiScale, inheritedTransform, ancestorFrameChanged);
@@ -708,10 +713,47 @@ inline void Runtime::updateElementTree(
 
     const bool childAncestorFrameChanged = ancestorFrameChanged || frameTargetChanged;
     const RenderTransform renderTransform = resolveRenderTransform(element, dpiScale, inheritedTransform);
+    runtime::PaintBoundsInstance bounds;
+    bounds.seen = true;
+    if (renderTransform.opacity > 0.001f &&
+        element.kind != ElementKind::Row &&
+        element.kind != ElementKind::Column &&
+        element.kind != ElementKind::Stack &&
+        element.kind != ElementKind::Flow) {
+        bounds.own = visualDirtyRectForElement(element, dpiScale, inheritedTransform);
+        bounds.subtree = bounds.own;
+        bounds.hasOwn = bounds.own.width > 0.0f && bounds.own.height > 0.0f;
+        bounds.hasSubtree = bounds.hasOwn;
+    }
+
     const std::vector<const Element*> children = orderedElements(element.children);
     for (const Element* child : children) {
-        updateElementTree(*child, event, deltaSeconds, dpiScale, hoverTargetId, renderTransform, childAncestorFrameChanged, disabledTree);
+        const runtime::PaintBoundsInstance childBounds =
+            updateElementTree(*child, event, deltaSeconds, dpiScale, hoverTargetId, renderTransform, childAncestorFrameChanged, disabledTree);
+        if (!childBounds.hasSubtree) {
+            continue;
+        }
+        bounds.subtree = bounds.hasSubtree ? unionRect(bounds.subtree, childBounds.subtree) : childBounds.subtree;
+        bounds.hasSubtree = true;
     }
+
+    if (bounds.hasSubtree && element.clip) {
+        Rect clipped{};
+        const Rect clipFrame = applyRenderTransformToLogicalRect(
+            {element.frame.x, element.frame.y, element.frame.width, element.frame.height},
+            dpiScale,
+            renderTransform);
+        bounds.hasSubtree = intersectRect(bounds.subtree, clipFrame, clipped);
+        bounds.subtree = clipped;
+        if (bounds.hasOwn) {
+            Rect clippedOwn{};
+            bounds.hasOwn = intersectRect(bounds.own, clipFrame, clippedOwn);
+            bounds.own = clippedOwn;
+        }
+    }
+
+    paintBounds_[element.id] = bounds;
+    return bounds;
 }
 
 inline void Runtime::updateLayoutElement(

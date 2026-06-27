@@ -24,6 +24,22 @@ inline void Runtime::prepareTextElement(
     const Rect* dirtyRect,
     bool hasScissor,
     const Rect& scissorRect) {
+    if (dirtyRect != nullptr || hasScissor) {
+        const auto cached = paintBounds_.find(element.id);
+        if (cached != paintBounds_.end()) {
+            if (!cached->second.hasSubtree) {
+                return;
+            }
+            const Rect subtree = toPixelRect(cached->second.subtree, dpiScale);
+            if (dirtyRect != nullptr && !intersects(subtree, *dirtyRect)) {
+                return;
+            }
+            if (hasScissor && !intersects(subtree, scissorRect)) {
+                return;
+            }
+        }
+    }
+
     const RenderTransform renderTransform = resolveRenderTransform(element, dpiScale, inheritedTransform);
     if (renderTransform.opacity <= 0.001f) {
         return;
@@ -74,6 +90,22 @@ inline void Runtime::renderElement(
     const Rect* dirtyRect,
     bool hasScissor,
     const Rect& scissorRect) {
+    if (dirtyRect != nullptr || hasScissor) {
+        const auto cached = paintBounds_.find(element.id);
+        if (cached != paintBounds_.end()) {
+            if (!cached->second.hasSubtree) {
+                return;
+            }
+            const Rect subtree = toPixelRect(cached->second.subtree, dpiScale);
+            if (dirtyRect != nullptr && !intersects(subtree, *dirtyRect)) {
+                return;
+            }
+            if (hasScissor && !intersects(subtree, scissorRect)) {
+                return;
+            }
+        }
+    }
+
     const RenderTransform renderTransform = resolveRenderTransform(element, dpiScale, inheritedTransform);
     if (renderTransform.opacity <= 0.001f) {
         return;
