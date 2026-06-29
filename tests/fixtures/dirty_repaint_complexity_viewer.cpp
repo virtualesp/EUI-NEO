@@ -134,30 +134,34 @@ void drawSceneComplexity(eui::Ui& ui, int level, float screenWidth, float button
 }
 
 void drawBaseButton(eui::Ui& ui, float x, float y, float width, float height) {
-    ui.rect("base.button.surface")
+    ui.stack("base.button")
         .x(x)
         .y(y)
         .size(width, height)
-        .radius(18.0f)
-        .states(rgba(0.18f, 0.44f, 0.92f),
-                rgba(0.25f, 0.53f, 1.0f),
-                rgba(0.12f, 0.32f, 0.78f))
-        .border(1.0f, rgba(0.90f, 0.96f, 1.0f, 0.20f))
-        .shadow(20.0f, 0.0f, 8.0f, rgba(0.0f, 0.0f, 0.0f, 0.25f))
-        .transition(0.12f, eui::Ease::OutCubic)
-        .focusable(true)
-        .onTextInput(handleKeys)
-        .build();
+        .visualStateFrom("base.button.surface", 0.96f)
+        .content([&] {
+            ui.rect("base.button.surface")
+                .size(width, height)
+                .radius(18.0f)
+                .states(rgba(0.18f, 0.44f, 0.92f),
+                        rgba(0.25f, 0.53f, 1.0f),
+                        rgba(0.12f, 0.32f, 0.78f))
+                .border(1.0f, rgba(0.90f, 0.96f, 1.0f, 0.20f))
+                .shadow(20.0f, 0.0f, 8.0f, rgba(0.0f, 0.0f, 0.0f, 0.25f))
+                .transition(0.12f, eui::Ease::OutCubic)
+                .focusable(true)
+                .onTextInput(handleKeys)
+                .build();
 
-    ui.text("base.button.label")
-        .x(x)
-        .y(y)
-        .size(width, height)
-        .text("Base Button")
-        .fontSize(21.0f)
-        .horizontalAlign(eui::HorizontalAlign::Center)
-        .verticalAlign(eui::VerticalAlign::Center)
-        .color(rgba(1.0f, 1.0f, 1.0f))
+            ui.text("base.button.label")
+                .size(width, height)
+                .text("Base Button")
+                .fontSize(21.0f)
+                .horizontalAlign(eui::HorizontalAlign::Center)
+                .verticalAlign(eui::VerticalAlign::Center)
+                .color(rgba(1.0f, 1.0f, 1.0f))
+                .build();
+        })
         .build();
 }
 
@@ -168,7 +172,7 @@ const DslAppConfig& dslAppConfig() {
         .title("Dirty Repaint Complexity Viewer")
         .pageId("dirty_repaint_complexity_viewer")
         .clearColor({0.07f, 0.08f, 0.10f, 1.0f})
-        .windowSize(1120, 720)
+        .windowSize(1120, 780)
         .showDebugStatsInTitle(true)
         .fps(90.0)
         .iconPath("");
