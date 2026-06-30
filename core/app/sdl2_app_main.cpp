@@ -236,9 +236,6 @@ void processMainEvent(SDL_Window* window, WindowState& state, const SDL_Event& e
             requestClose(window, state);
             break;
         case SDL_WINDOWEVENT_MINIMIZED:
-            if (state.trayAvailable) {
-                hideToTray(window, state);
-            }
             break;
         case SDL_WINDOWEVENT_EXPOSED:
         case SDL_WINDOWEVENT_RESIZED:

@@ -312,7 +312,8 @@ bool updateManagedWindow(ManagedWindow& managed, float deltaSeconds, bool update
     managed.state.iconified = glfwGetWindowAttrib(managed.window, GLFW_ICONIFIED) == GLFW_TRUE;
     if (managed.state.iconified) {
         managed.renderBackend->releaseRenderCache();
-        managed.state.paintRequested = false;
+        managed.state.paintRequested = true;
+        managed.content.requestFullPaint();
         managed.state.resetTiming(glfwGetTime());
         return true;
     }
@@ -322,7 +323,8 @@ bool updateManagedWindow(ManagedWindow& managed, float deltaSeconds, bool update
     glfwGetFramebufferSize(managed.window, &framebufferWidth, &framebufferHeight);
     if (framebufferWidth <= 0 || framebufferHeight <= 0) {
         managed.renderBackend->releaseRenderCache();
-        managed.state.paintRequested = false;
+        managed.state.paintRequested = true;
+        managed.content.requestFullPaint();
         managed.state.resetTiming(glfwGetTime());
         return true;
     }
@@ -464,9 +466,7 @@ int main() {
             return;
         }
         state->iconified = iconified == GLFW_TRUE;
-        if (state->trayAvailable && iconified && !state->forceClose) {
-            state->hideToTrayRequested = true;
-        } else if (!iconified) {
+        if (!iconified) {
             state->paintRequested = true;
             app::detail::requestFullPaint();
         }
@@ -503,7 +503,8 @@ int main() {
         windowState.iconified = glfwGetWindowAttrib(window, GLFW_ICONIFIED) == GLFW_TRUE;
         if (windowState.iconified) {
             renderBackend->releaseRenderCache();
-            windowState.paintRequested = false;
+            windowState.paintRequested = true;
+            app::detail::requestFullPaint();
             windowState.consumeFrameRequest();
             windowState.resetTiming(glfwGetTime());
             glfwWaitEvents();
@@ -530,7 +531,8 @@ int main() {
         glfwGetFramebufferSize(window, &framebufferWidth, &framebufferHeight);
         if (framebufferWidth <= 0 || framebufferHeight <= 0) {
             renderBackend->releaseRenderCache();
-            windowState.paintRequested = false;
+            windowState.paintRequested = true;
+            app::detail::requestFullPaint();
             windowState.consumeFrameRequest();
             glfwWaitEvents();
             mainWindowRuntime.markUnavailableFrame(glfwGetTime());
