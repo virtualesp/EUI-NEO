@@ -36,6 +36,7 @@
 struct WindowState : app::AppRunner {
     bool hideToTrayRequested = false;
     bool forceClose = false;
+    bool iconified = false;
     GLFWwindow* modalChildWindow = nullptr;
 };
 
@@ -223,6 +224,16 @@ void installWindowCallbacks(GLFWwindow* window, WindowState& windowState) {
             glfwFocusWindow(state->modalChildWindow);
         }
     });
+    glfwSetWindowIconifyCallback(window, [](GLFWwindow* currentWindow, int iconified) {
+        WindowState* state = static_cast<WindowState*>(glfwGetWindowUserPointer(currentWindow));
+        if (!state) {
+            return;
+        }
+        state->iconified = iconified == GLFW_TRUE;
+        if (!state->iconified) {
+            state->paintRequested = true;
+        }
+    });
 }
 
 std::unique_ptr<ManagedWindow> createManagedWindow(const app::DslWindowRequest& request,
@@ -298,13 +309,21 @@ bool updateManagedWindow(ManagedWindow& managed, float deltaSeconds, bool update
 
     managed.renderBackend->makeCurrent();
 
+    managed.state.iconified = glfwGetWindowAttrib(managed.window, GLFW_ICONIFIED) == GLFW_TRUE;
+    if (managed.state.iconified) {
+        managed.renderBackend->releaseRenderCache();
+        managed.state.paintRequested = false;
+        managed.state.resetTiming(glfwGetTime());
+        return true;
+    }
+
     int framebufferWidth = 0;
     int framebufferHeight = 0;
     glfwGetFramebufferSize(managed.window, &framebufferWidth, &framebufferHeight);
     if (framebufferWidth <= 0 || framebufferHeight <= 0) {
         managed.renderBackend->releaseRenderCache();
-        managed.content.requestFullPaint();
-        managed.state.paintRequested = true;
+        managed.state.paintRequested = false;
+        managed.state.resetTiming(glfwGetTime());
         return true;
     }
 
@@ -335,6 +354,24 @@ bool updateManagedWindow(ManagedWindow& managed, float deltaSeconds, bool update
 
 bool isManagedWindowClosed(const ManagedWindow& managed) {
     return managed.window == nullptr || glfwWindowShouldClose(managed.window);
+}
+
+bool isManagedWindowRenderable(const ManagedWindow& managed) {
+    if (managed.window == nullptr || glfwWindowShouldClose(managed.window)) {
+        return false;
+    }
+    if (managed.state.iconified || glfwGetWindowAttrib(managed.window, GLFW_ICONIFIED) == GLFW_TRUE) {
+        return false;
+    }
+
+    int framebufferWidth = 0;
+    int framebufferHeight = 0;
+    glfwGetFramebufferSize(managed.window, &framebufferWidth, &framebufferHeight);
+    return framebufferWidth > 0 && framebufferHeight > 0;
+}
+
+bool anyRenderableManagedWindowAnimating(const app::DslWindowManager<ManagedWindow>& windows) {
+    return windows.anyAnimating(isManagedWindowRenderable);
 }
 
 void pruneClosedWindows(app::DslWindowManager<ManagedWindow>& windows) {
@@ -423,9 +460,13 @@ int main() {
     });
     glfwSetWindowIconifyCallback(window, [](GLFWwindow* currentWindow, int iconified) {
         WindowState* state = static_cast<WindowState*>(glfwGetWindowUserPointer(currentWindow));
-        if (state && state->trayAvailable && iconified && !state->forceClose) {
+        if (!state) {
+            return;
+        }
+        state->iconified = iconified == GLFW_TRUE;
+        if (state->trayAvailable && iconified && !state->forceClose) {
             state->hideToTrayRequested = true;
-        } else if (state && !iconified) {
+        } else if (!iconified) {
             state->paintRequested = true;
             app::detail::requestFullPaint();
         }
@@ -459,7 +500,17 @@ int main() {
             continue;
         }
 
-        if (windowState.anyAnimating(childWindows.anyAnimating())) {
+        windowState.iconified = glfwGetWindowAttrib(window, GLFW_ICONIFIED) == GLFW_TRUE;
+        if (windowState.iconified) {
+            renderBackend->releaseRenderCache();
+            windowState.paintRequested = false;
+            windowState.consumeFrameRequest();
+            windowState.resetTiming(glfwGetTime());
+            glfwWaitEvents();
+            continue;
+        }
+
+        if (windowState.anyAnimating(anyRenderableManagedWindowAnimating(childWindows))) {
             waitForNextFrame(window, windowState);
         }
 
@@ -479,7 +530,8 @@ int main() {
         glfwGetFramebufferSize(window, &framebufferWidth, &framebufferHeight);
         if (framebufferWidth <= 0 || framebufferHeight <= 0) {
             renderBackend->releaseRenderCache();
-            app::detail::requestFullPaint();
+            windowState.paintRequested = false;
+            windowState.consumeFrameRequest();
             glfwWaitEvents();
             mainWindowRuntime.markUnavailableFrame(glfwGetTime());
             continue;
@@ -514,10 +566,10 @@ int main() {
                 glfwSetWindowTitle(window, title);
             },
             [&] {
-                return childWindows.anyAnimating();
+                return anyRenderableManagedWindowAnimating(childWindows);
             });
 
-        const bool anyAnimating = windowState.anyAnimating(childWindows.anyAnimating());
+        const bool anyAnimating = windowState.anyAnimating(anyRenderableManagedWindowAnimating(childWindows));
         if (anyAnimating) {
             glfwPollEvents();
         } else {

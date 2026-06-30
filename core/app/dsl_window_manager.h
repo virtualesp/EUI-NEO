@@ -66,8 +66,15 @@ public:
     }
 
     bool anyAnimating() const {
-        return std::any_of(windows_.begin(), windows_.end(), [](const WindowPtr& window) {
-            return window && window->content.isAnimating();
+        return anyAnimating([](const WindowT&) {
+            return true;
+        });
+    }
+
+    template <typename ActiveFn>
+    bool anyAnimating(ActiveFn&& isActive) const {
+        return std::any_of(windows_.begin(), windows_.end(), [&](const WindowPtr& window) {
+            return window && isActive(*window) && window->content.isAnimating();
         });
     }
 
