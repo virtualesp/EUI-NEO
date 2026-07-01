@@ -52,12 +52,15 @@ render dirty rect
       draw layer texture clipped by dirty/scissor
     else if child subtree is a cache candidate:
       render child subtree into a transparent layer texture
-      draw layer texture
+      render the same child normally for this frame
+      request one follow-up full paint so the next frame can use the layer/cache
     else:
       render child subtree normally
 ```
 
 Layer rebuild disables nested retained-layer use for that subtree. This keeps the first implementation simple and avoids nested framebuffer state surprises.
+
+A freshly rebuilt layer is not sampled in the same frame that creates it. The runtime marks the layer valid, renders the subtree through the normal primitive path for that frame, and requests one follow-up full paint. The follow-up frame lets the render cache and the retained layer become visible together from a stable state. After that, unchanged static subtrees continue to use retained-layer hits; the cache is not disabled for transition-capable static UI.
 
 ## Stats
 

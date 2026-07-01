@@ -456,6 +456,8 @@ inline bool Runtime::renderRetainedLayer(core::render::RenderBackend& renderBack
         renderBackend.endLayerFrame();
         layer.valid = true;
         ++core::render::currentRenderFrameStats().retainedLayerRebuilds;
+        // Use the freshly rebuilt layer on the next repaint; keep this frame on the direct path.
+        return false;
     } else {
         ++core::render::currentRenderFrameStats().retainedLayerHits;
     }

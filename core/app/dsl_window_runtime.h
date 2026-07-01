@@ -89,7 +89,7 @@ public:
     void render(core::render::RenderBackend& renderBackend, int framebufferWidth, int framebufferHeight, float dpiScale) {
         core::render::ScopedRenderBackend scopedRenderBackend(renderBackend);
         runtime_.render(framebufferWidth, framebufferHeight, dpiScale, request_.clearColor);
-        paintRequested_ = false;
+        paintRequested_ = runtime_.paintRequested();
     }
 
 private:

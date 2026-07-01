@@ -45,6 +45,8 @@ public:
 
     bool composeRequested() const;
 
+    bool paintRequested() const;
+
     void requestFullPaint();
 
     void render(int windowWidth, int windowHeight, float dpiScale, const Color& clearColor);
