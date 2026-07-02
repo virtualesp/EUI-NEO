@@ -17,7 +17,7 @@ option(EUI_BUILD_APPS "Build EUI-NEO bundled example applications" ${EUI_NEO_TOP
 option(EUI_BUILD_USER_APPS "Build user applications from apps/." ${EUI_NEO_TOP_LEVEL_DEFAULT})
 option(EUI_BUILD_TEST_FIXTURES "Build internal test fixture applications." OFF)
 option(EUI_BUILD_SHARED "Build eui_neo as a shared library instead of a static library." OFF)
-option(EUI_ENABLE_INSTALL "Install EUI-NEO library, headers, and CMake package files." ON)
+option(EUI_ENABLE_INSTALL "Install EUI-NEO library, headers, and CMake package files." ${EUI_NEO_TOP_LEVEL_DEFAULT})
 option(EUI_VULKAN_LOW_LATENCY_PRESENT "Prefer low-latency Vulkan presentation when available." OFF)
 
 set(EUI_DEFAULT_WINDOW_BACKEND "glfw")
@@ -380,7 +380,14 @@ if(EUI_ENABLE_INSTALL)
         RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
         INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
     )
-    foreach(optional_target glad glfw freetype png_static eui_zlib harfbuzz eui_md4c SDL2-static)
+    set(EUI_NEO_INSTALL_DEP_TARGETS freetype png_static eui_zlib harfbuzz eui_md4c SDL2-static)
+    if(EUI_OWNS_GLAD_TARGET)
+        list(APPEND EUI_NEO_INSTALL_DEP_TARGETS glad)
+    endif()
+    if(EUI_OWNS_GLFW_TARGET)
+        list(APPEND EUI_NEO_INSTALL_DEP_TARGETS glfw)
+    endif()
+    foreach(optional_target ${EUI_NEO_INSTALL_DEP_TARGETS})
         if(TARGET ${optional_target})
             install(TARGETS ${optional_target}
                 EXPORT EuiNeoTargets
@@ -399,7 +406,7 @@ if(EUI_ENABLE_INSTALL)
         DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/eui-neo
         FILES_MATCHING PATTERN "*.h"
     )
-    if(TARGET glfw)
+    if(EUI_OWNS_GLFW_TARGET AND TARGET glfw)
         install(DIRECTORY "${EUI_GLFW_DIR}/include/GLFW"
             DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
             FILES_MATCHING PATTERN "*.h"
@@ -434,7 +441,7 @@ if(EUI_ENABLE_INSTALL)
     install(FILES "${TRAY_INCLUDE_DIR}/tray.h"
         DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/eui-neo/3rd/tray
     )
-    if(TARGET glad)
+    if(EUI_OWNS_GLAD_TARGET AND TARGET glad)
         install(DIRECTORY "${glad_SOURCE_DIR}/include/"
             DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/eui-neo/3rd/glad/include
             FILES_MATCHING PATTERN "*.h"
@@ -473,8 +480,15 @@ find_dependency(Threads)
 
 if(EUI_NEO_RENDER_BACKEND STREQUAL "opengl")
     find_dependency(OpenGL)
+    if(NOT @EUI_OWNS_GLAD_TARGET@)
+        find_dependency(glad CONFIG)
+    endif()
 elseif(EUI_NEO_RENDER_BACKEND STREQUAL "vulkan")
     find_dependency(Vulkan)
+endif()
+
+if(EUI_NEO_WINDOW_BACKEND STREQUAL "glfw" AND NOT @EUI_OWNS_GLFW_TARGET@)
+    find_dependency(glfw3 CONFIG)
 endif()
 
 if(EUI_NEO_WINDOW_BACKEND STREQUAL "sdl2")

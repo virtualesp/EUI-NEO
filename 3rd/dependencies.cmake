@@ -12,6 +12,9 @@ list(PREPEND CMAKE_MODULE_PATH "${EUI_THIRD_PARTY_DIR}")
 include(FetchContent)
 include("${CMAKE_CURRENT_LIST_DIR}/EuiThirdParty.cmake")
 
+set(EUI_OWNS_GLFW_TARGET OFF)
+set(EUI_OWNS_GLAD_TARGET OFF)
+
 function(eui_use_bundled_dependency out_var dep_name source_dir marker_file)
     if(EUI_DEPS_MODE STREQUAL "fetch")
         set(${out_var} FALSE PARENT_SCOPE)
@@ -72,29 +75,49 @@ if(EUI_WINDOW_BACKEND STREQUAL "glfw")
     eui_set_third_party_option(GLFW_BUILD_DOCS OFF "Build the GLFW documentation")
     eui_set_third_party_option(GLFW_INSTALL OFF "Generate installation target")
 
-    eui_use_bundled_dependency(
-        EUI_USE_BUNDLED_GLFW
-        "GLFW"
-        "${EUI_THIRD_PARTY_DIR}/glfw"
-        "CMakeLists.txt"
-    )
-
-    eui_begin_static_third_party_config()
-    if(EUI_USE_BUNDLED_GLFW)
-        set(EUI_GLFW_DIR "${EUI_THIRD_PARTY_DIR}/glfw")
-        add_subdirectory("${EUI_GLFW_DIR}" "${CMAKE_CURRENT_BINARY_DIR}/_deps/glfw-bundled-build" EXCLUDE_FROM_ALL)
+    if(TARGET glfw)
+        message(STATUS "Using existing GLFW target: glfw")
     else()
-        FetchContent_Declare(
-            glfw
-            URL https://github.com/glfw/glfw/archive/refs/tags/3.4.zip
-            URL_HASH SHA256=a133ddc3d3c66143eba9035621db8e0bcf34dba1ee9514a9e23e96afd39fd57a
-            DOWNLOAD_EXTRACT_TIMESTAMP TRUE
-            TIMEOUT 30
-        )
-        FetchContent_MakeAvailable(glfw)
-        set(EUI_GLFW_DIR "${glfw_SOURCE_DIR}")
+        if(EUI_DEPS_MODE STREQUAL "auto")
+            find_package(glfw3 CONFIG QUIET)
+        endif()
+
+        if(NOT TARGET glfw)
+            eui_use_bundled_dependency(
+                EUI_USE_BUNDLED_GLFW
+                "GLFW"
+                "${EUI_THIRD_PARTY_DIR}/glfw"
+                "CMakeLists.txt"
+            )
+
+            eui_begin_static_third_party_config()
+            if(EUI_USE_BUNDLED_GLFW)
+                set(EUI_GLFW_DIR "${EUI_THIRD_PARTY_DIR}/glfw")
+                add_subdirectory("${EUI_GLFW_DIR}" "${CMAKE_CURRENT_BINARY_DIR}/_deps/glfw-bundled-build" EXCLUDE_FROM_ALL)
+            else()
+                FetchContent_Declare(
+                    glfw
+                    URL https://github.com/glfw/glfw/archive/refs/tags/3.4.zip
+                    URL_HASH SHA256=a133ddc3d3c66143eba9035621db8e0bcf34dba1ee9514a9e23e96afd39fd57a
+                    DOWNLOAD_EXTRACT_TIMESTAMP TRUE
+                    TIMEOUT 30
+                )
+                FetchContent_MakeAvailable(glfw)
+                set(EUI_GLFW_DIR "${glfw_SOURCE_DIR}")
+            endif()
+            eui_end_static_third_party_config()
+            set(EUI_OWNS_GLFW_TARGET ON)
+        else()
+            message(STATUS "Using package GLFW target: glfw")
+        endif()
     endif()
-    eui_end_static_third_party_config()
+
+    if(NOT TARGET glfw)
+        message(FATAL_ERROR
+            "EUI_WINDOW_BACKEND=glfw requires a CMake target named 'glfw'. "
+            "Provide one before adding EUI-NEO, install glfw3, or allow EUI-NEO to use bundled/fetched GLFW."
+        )
+    endif()
 endif()
 
 if(EUI_WINDOW_BACKEND STREQUAL "sdl2")
@@ -138,43 +161,63 @@ if(EUI_WINDOW_BACKEND STREQUAL "sdl2")
 endif()
 
 if(EUI_RESOLVED_RENDER_BACKEND STREQUAL "opengl")
-    eui_use_bundled_dependency(
-        EUI_USE_BUNDLED_GLAD
-        "glad"
-        "${EUI_THIRD_PARTY_DIR}/glad"
-        "src/glad.c"
-    )
-
-    if(EUI_USE_BUNDLED_GLAD)
-        set(glad_SOURCE_DIR "${EUI_THIRD_PARTY_DIR}/glad")
+    if(TARGET glad)
+        message(STATUS "Using existing glad target: glad")
     else()
-        FetchContent_Declare(
-            glad
-            URL https://github.com/libigl/libigl-glad/archive/651a425101365aa6e8504988ef9bb363d066c5ee.zip
-            DOWNLOAD_EXTRACT_TIMESTAMP TRUE
-            TIMEOUT 30
-        )
-        FetchContent_GetProperties(glad)
-        if(NOT glad_POPULATED)
-            if(POLICY CMP0169)
-                cmake_policy(PUSH)
-                cmake_policy(SET CMP0169 OLD)
+        if(EUI_DEPS_MODE STREQUAL "auto")
+            find_package(glad CONFIG QUIET)
+        endif()
+
+        if(NOT TARGET glad)
+            eui_use_bundled_dependency(
+                EUI_USE_BUNDLED_GLAD
+                "glad"
+                "${EUI_THIRD_PARTY_DIR}/glad"
+                "src/glad.c"
+            )
+
+            if(EUI_USE_BUNDLED_GLAD)
+                set(glad_SOURCE_DIR "${EUI_THIRD_PARTY_DIR}/glad")
+            else()
+                FetchContent_Declare(
+                    glad
+                    URL https://github.com/libigl/libigl-glad/archive/651a425101365aa6e8504988ef9bb363d066c5ee.zip
+                    DOWNLOAD_EXTRACT_TIMESTAMP TRUE
+                    TIMEOUT 30
+                )
+                FetchContent_GetProperties(glad)
+                if(NOT glad_POPULATED)
+                    if(POLICY CMP0169)
+                        cmake_policy(PUSH)
+                        cmake_policy(SET CMP0169 OLD)
+                    endif()
+                    FetchContent_Populate(glad)
+                    if(POLICY CMP0169)
+                        cmake_policy(POP)
+                    endif()
+                endif()
             endif()
-            FetchContent_Populate(glad)
-            if(POLICY CMP0169)
-                cmake_policy(POP)
+            add_library(glad "${glad_SOURCE_DIR}/src/glad.c")
+            target_include_directories(glad PUBLIC
+                $<BUILD_INTERFACE:${glad_SOURCE_DIR}/include>
+                $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}/eui-neo/3rd/glad/include>
+            )
+            if(NOT WIN32)
+                target_link_libraries(glad PUBLIC ${CMAKE_DL_LIBS})
             endif()
+            set_target_properties(glad PROPERTIES POSITION_INDEPENDENT_CODE ON)
+            set(EUI_OWNS_GLAD_TARGET ON)
+        else()
+            message(STATUS "Using package glad target: glad")
         endif()
     endif()
-    add_library(glad "${glad_SOURCE_DIR}/src/glad.c")
-    target_include_directories(glad PUBLIC
-        $<BUILD_INTERFACE:${glad_SOURCE_DIR}/include>
-        $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}/eui-neo/3rd/glad/include>
-    )
-    if(NOT WIN32)
-        target_link_libraries(glad PUBLIC ${CMAKE_DL_LIBS})
+
+    if(NOT TARGET glad)
+        message(FATAL_ERROR
+            "OpenGL builds require a CMake target named 'glad'. "
+            "Provide one before adding EUI-NEO, install glad, or allow EUI-NEO to use bundled/fetched glad."
+        )
     endif()
-    set_target_properties(glad PROPERTIES POSITION_INDEPENDENT_CODE ON)
 endif()
 
 eui_use_bundled_dependency(
