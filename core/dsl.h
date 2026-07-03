@@ -1603,7 +1603,8 @@ private:
     }
 
     static bool elementBlocksRetainedLayer(const Element& element) {
-        return element.interactive ||
+        return element.clip ||
+               element.interactive ||
                element.focusable ||
                element.hasImeRect ||
                element.onClick ||
