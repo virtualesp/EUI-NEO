@@ -9,20 +9,24 @@ enum class ElementKind {
     Row,
     Column,
     Stack,
+    Flow,
     Rect,
+    Polygon,
     Text,
     Image,
-    Polygon
+    Svg
 };
 ```
 
 - `Row`：横向布局容器。
 - `Column`：纵向布局容器。
 - `Stack`：叠放布局容器。
+- `Flow`：横向流式布局容器，空间不足时自动换行。
 - `Rect`：基础视觉图元，支持颜色、渐变、圆角、边框、阴影、透明度、blur、transform、hover/pressed 状态。
-- `Text`：文本图元，支持字体、字号、颜色、换行、行高、对齐、透明度和 transform。
-- `Image`：图片图元，支持本地图片、网络图片、SVG、Bing daily、cover/contain/stretch。
 - `Polygon`：多边形图元，支持点集、圆角、颜色、透明度、transform 和 hover/pressed 状态；当前图表 tooltip 指针和 pieChart 扇区都基于它。
+- `Text`：文本图元，支持字体、字号、颜色、换行、行高、对齐、透明度和 transform。
+- `Image`：图片图元，支持本地图片、网络图片、本地 SVG、Bing daily、cover/contain/stretch。
+- `Svg`：内联 SVG 图元，通过 `ui.svg(...).source(svgMarkup)` 声明并复用 Image 的布局、动画和渲染路径。
 
 组件不进入 core 枚举。组件层只是组合 DSL 图元，例如 `components::button(ui, id)` 内部使用 `Stack + Rect + Row + Text`。
 
@@ -63,6 +67,8 @@ static const DslAppConfig config = DslAppConfig{}
     .fps(90.0)
     .textFont("YouSheBiaoTiHei-2.ttf");
 ```
+
+`DslAppConfig` 的标题、页面 ID、图标和字体路径、托盘文本与图标路径都由配置对象以 `std::string` 持有。setter 可以安全接收局部或临时 `std::string`；调用返回后不会保留调用方字符串的指针。
 
 托盘后台运行默认关闭。需要托盘的页面可以在 `DslAppConfig` 中显式调用 `.tray(true)`，例如串口工具。启用托盘后，关闭或最小化窗口会隐藏到托盘并释放图形资源；托盘 `Show` 会重新显示窗口，`Exit` 才真正退出。
 
@@ -157,7 +163,7 @@ ui.loader("counter.loader")
 
 ## 通用交互 DSL
 
-`Row / Column / Stack / Rect / Text / Image / Polygon` 都支持通用交互方法：
+`Row / Column / Stack / Flow / Rect / Polygon / Text / Image / Svg` 都支持通用交互方法：
 
 ```cpp
 .interactive(true)
@@ -350,6 +356,16 @@ Image 支持：
 
 默认 fit 是 `Cover`，图片会适应裁剪，不会强行压缩变形。
 
+图片 facade 还提供主题色采样 API，适合让按钮、卡片或控制条跟随当前图片变色：
+
+```cpp
+const eui::Color accent = eui::image::themeColor(
+    "bing://daily?idx=0&mkt=zh-CN",
+    {0.38f, 0.72f, 0.96f, 1.0f});
+```
+
+`themeColor(source, fallback)` 接受本地路径、`http/https` 图片 URL 和 `bing://daily?...` 源。图片未就绪或解码失败时返回 fallback；成功后返回底层缓存的采样主题色。
+
 ## Polygon DSL
 
 ```cpp
@@ -456,13 +472,13 @@ ui.rect("actor")
 
 Frame 动画需要显式 `.animate(eui::AnimProperty::Frame)`。窗口大小变化、页面切换导致的普通布局尺寸变化不会默认产生长宽动画。
 
-容器 `Row` / `Column` / `Stack` 也支持 `opacity` 和 transform。Runtime 会把容器的 `translate`、`scale`、`rotate`、`rotateX`、`rotateY`、`translateZ`、`perspective`、`transformOrigin` 组合成投影矩阵并继承到子树，因此弹窗、下拉、菜单、卡片翻转和透视动画会作用到内部 Rect / Text / Image / Polygon。布局占位仍由未 transform 的逻辑 frame 决定。
+容器 `Row` / `Column` / `Stack` / `Flow` 也支持 `opacity` 和 transform。Runtime 会把容器的 `translate`、`scale`、`rotate`、`rotateX`、`rotateY`、`translateZ`、`perspective`、`transformOrigin` 组合成投影矩阵并继承到子树，因此弹窗、下拉、菜单、卡片翻转和透视动画会作用到内部 Rect / Polygon / Text / Image / Svg。布局占位仍由未 transform 的逻辑 frame 决定。
 
 当前可动画属性：
 
 - Rect：frame、color、opacity、radius、border、shadow、blur、transform。
 - Text：frame、text color、opacity、transform。
-- Image：frame、tint/color、opacity、radius、transform。
+- Image / Svg：frame、tint/color、opacity、radius、transform。
 - Polygon：frame、color、opacity、transform。
 
 ## 组件写法
@@ -522,7 +538,7 @@ components::button(ui, "save")
 
 - 持有 `Ui`。
 - 调用 `ui.layout()` 计算逻辑坐标。
-- 按 id 缓存 Rect / Text / Image / Polygon primitive 实例。
+- 按 id 缓存 Rect / Polygon / Text / Image / Svg primitive 实例，其中 Image 与 Svg 共用 image instance 和渲染路径。
 - 每帧回收已经不在 DSL 树里的 primitive、交互状态和 dirty key 实例。
 - 统一处理 pointer event、hit-test、press capture、click。
 - disabled 父节点会禁用整棵子树的交互、焦点、文本输入和 IME 光标状态。
